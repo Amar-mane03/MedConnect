@@ -2,6 +2,7 @@ services:
   - type: web
     name: medconnect-api
     runtime: node
+    plan: free
     rootDir: Backend
     buildCommand: npm ci
     startCommand: npm start
@@ -27,6 +28,7 @@ services:
   - type: web
     name: medconnect-frontend
     runtime: static
+    plan: free
     rootDir: Frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
