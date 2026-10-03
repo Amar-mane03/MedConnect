@@ -1,7 +1,10 @@
 import axios from "axios";
 
-export const API_BASE_URL: string = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000/api";
-export const SOCKET_URL: string = import.meta.env.VITE_SOCKET_URL || "http://127.0.0.1:5000";
+const localServerUrl = "http://127.0.0.1:5000";
+const serverOrigin = import.meta.env.DEV ? localServerUrl : window.location.origin;
+
+export const API_BASE_URL: string = import.meta.env.VITE_API_URL || `${serverOrigin}/api`;
+export const SOCKET_URL: string = import.meta.env.VITE_SOCKET_URL || serverOrigin;
 
 const API = axios.create({
   baseURL: API_BASE_URL,
