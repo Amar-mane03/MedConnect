@@ -1,0 +1,10 @@
+{
+  "description": "Connects doctors and medical students for mentorship and knowledge sharing, fostering professional growth through case studies, forums, and direct messaging.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
