@@ -3,10 +3,9 @@ services:
     name: medconnect-api
     runtime: node
     plan: free
-    rootDir: Backend
-    buildCommand: npm ci
-    startCommand: npm start
-    healthCheckPath: /
+    buildCommand: npm ci --prefix Frontend && npm run build --prefix Frontend && npm ci --prefix Backend
+    startCommand: npm start --prefix Backend
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -23,6 +22,8 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
         sync: false
 
   - type: web
