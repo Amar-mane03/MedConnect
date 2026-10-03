@@ -28,7 +28,6 @@ services:
   - type: web
     name: medconnect-frontend
     runtime: static
-    plan: free
     rootDir: Frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
