@@ -68,3 +68,20 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #E1E7E5; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #B9B2A6; }
+
+@media print {
+  @page { margin: 16mm; }
+  body * { visibility: hidden !important; }
+  .printable-report,
+  .printable-report * { visibility: visible !important; }
+  .printable-report {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: 100% !important;
+    border: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  .no-print { display: none !important; }
+}

@@ -122,7 +122,7 @@ export default function MentorProfilePage({ navigate, mentorId, onSelectMentor }
   }, [mentorId, role, user?._id]);
 
   useEffect(() => {
-    if (role !== 'mentee') return;
+    if (role !== 'mentee' && role !== 'student') return;
     const request = myRequests.find(r => {
       const requestMentorId = typeof r.mentor === 'string' ? r.mentor : r.mentor?._id;
       return requestMentorId === selectedMentorId;
@@ -225,7 +225,7 @@ export default function MentorProfilePage({ navigate, mentorId, onSelectMentor }
           </div>
         </div>
 
-        {role === 'mentee' && myRequests.length > 0 && (
+        {(role === 'mentee' || role === 'student') && myRequests.length > 0 && (
           <section className="mb-8 border border-[#E1E7E5] bg-white" aria-labelledby="mentorship-history-title">
             <div className="border-b border-[#E1E7E5] px-5 py-3">
               <h2 id="mentorship-history-title" className="text-sm font-bold text-[#0B192C]">Your mentorship requests</h2>
@@ -254,7 +254,7 @@ export default function MentorProfilePage({ navigate, mentorId, onSelectMentor }
               <div className="flex items-center gap-2">
                 <span className="text-lg">📬</span>
                 <h3 className="font-bold text-[#0B192C] text-base" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-                  Incoming Mentee Applications ({incomingRequests.filter(r => r.status === 'pending').length} pending)
+                  Incoming Student & Mentee Requests ({incomingRequests.filter(r => r.status === 'pending').length} pending)
                 </h3>
               </div>
             </div>
@@ -334,19 +334,25 @@ export default function MentorProfilePage({ navigate, mentorId, onSelectMentor }
 
                 {/* Action Buttons */}
                 <div className="mt-5 space-y-2">
-                  <button
-                    onClick={() => {
-                      if (requestStatus !== 'pending' && requestStatus !== 'accepted') setRequestModalOpen(true);
-                    }}
-                    disabled={requestStatus === 'pending' || requestStatus === 'accepted'}
-                    className={`w-full py-3 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                      requestStatus === 'pending' || requestStatus === 'accepted'
-                        ? 'bg-[#F0F4F2] text-[#52616C] border border-[#E1E7E5] cursor-default'
-                        : 'bg-[#0B192C] hover:bg-[#192B40] text-white shadow-sm'
-                    }`}
-                  >
-                    {requestStatus === 'pending' ? 'Request pending' : requestStatus === 'accepted' ? 'Mentorship connected' : requestStatus === 'declined' ? 'Request again' : 'Request Mentorship'}
-                  </button>
+                  {(role === 'mentee' || role === 'student') ? (
+                    <button
+                      onClick={() => {
+                        if (requestStatus !== 'pending' && requestStatus !== 'accepted') setRequestModalOpen(true);
+                      }}
+                      disabled={requestStatus === 'pending' || requestStatus === 'accepted'}
+                      className={`w-full py-3 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                        requestStatus === 'pending' || requestStatus === 'accepted'
+                          ? 'bg-[#F0F4F2] text-[#52616C] border border-[#E1E7E5] cursor-default'
+                          : 'bg-[#0B192C] hover:bg-[#192B40] text-white shadow-sm'
+                      }`}
+                    >
+                      {requestStatus === 'pending' ? 'Request pending' : requestStatus === 'accepted' ? 'Mentorship connected' : requestStatus === 'declined' ? 'Request again' : 'Request mentorship'}
+                    </button>
+                  ) : (
+                    <p className="rounded-lg bg-[#F7F9F8] px-3 py-2 text-xs text-[#64727C]">
+                      Mentorship requests are available to student and mentee accounts.
+                    </p>
+                  )}
                   <button
                     onClick={() => navigate('messages')}
                     className="w-full py-3 rounded-full text-xs sm:text-sm font-bold border border-[#E1E7E5] text-[#0B192C] hover:bg-[#F0F4F2] transition-all cursor-pointer"

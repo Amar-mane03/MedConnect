@@ -65,7 +65,9 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
       setUnreadCount(prev => prev + 1);
     });
 
-    return () => socket.disconnect();
+    return () => {
+      socket.disconnect();
+    };
   }, [userId]);
 
   const updateNotificationPreference = async (category: ActivityNotification['category'], enabled: boolean) => {
@@ -118,12 +120,43 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
         .toUpperCase()
     : 'MC';
 
-  const navLinks: { label: string; icon: typeof HomeIcon; page: Page }[] = [
-    { label: 'Clinical Feed', icon: HomeIcon, page: 'dashboard' },
-    { label: 'Mentors Directory', icon: MentorsIcon, page: 'mentor-profile' },
-    { label: 'Discussion Forums', icon: ForumIcon, page: 'forums' },
-    { label: 'Messages', icon: MsgIcon, page: 'messages' },
-  ];
+  const navLinks: { label: string; icon: typeof HomeIcon; page: Page }[] = role === 'ngo'
+    ? [
+        { label: 'NGO dashboard', icon: HomeIcon, page: 'ngo-dashboard' },
+        { label: 'Discover camps', icon: StudyNotesIcon, page: 'camps' },
+        { label: 'NGO directory', icon: MentorsIcon, page: 'ngos' },
+        { label: 'Community hub', icon: ForumIcon, page: 'community' },
+      ]
+    : role === 'student' || role === 'mentee'
+      ? [
+          { label: 'Learning feed', icon: HomeIcon, page: 'dashboard' },
+          { label: 'Mentors', icon: MentorsIcon, page: 'mentor-profile' },
+          { label: 'Study resources', icon: StudyNotesIcon, page: 'resources' },
+          { label: 'Discussions', icon: ForumIcon, page: 'forums' },
+          { label: 'Messages', icon: MsgIcon, page: 'messages' },
+          { label: 'Learning groups', icon: HomeIcon, page: 'groups' },
+          { label: 'Events & webinars', icon: StudyNotesIcon, page: 'events' },
+          { label: 'NGO directory', icon: MentorsIcon, page: 'ngos' },
+          { label: 'Volunteer camps', icon: StudyNotesIcon, page: 'camps' },
+          { label: 'My activities', icon: HomeIcon, page: 'activities' },
+          { label: 'Community hub', icon: ForumIcon, page: 'community' },
+        ]
+      : role === 'admin'
+        ? [
+            { label: 'Admin console', icon: AdminIcon, page: 'admin' },
+            { label: 'NGO verification', icon: AdminIcon, page: 'ngo-admin' },
+            { label: 'NGO directory', icon: MentorsIcon, page: 'ngos' },
+            { label: 'Upcoming camps', icon: StudyNotesIcon, page: 'camps' },
+            { label: 'Community hub', icon: ForumIcon, page: 'community' },
+          ]
+        : [
+            { label: 'Clinical Feed', icon: HomeIcon, page: 'dashboard' },
+            { label: 'Study Notes', icon: StudyNotesIcon, page: 'resources' },
+            { label: 'Mentors Directory', icon: MentorsIcon, page: 'mentor-profile' },
+            { label: 'Discussion Forums', icon: ForumIcon, page: 'forums' },
+            { label: 'Messages', icon: MsgIcon, page: 'messages' },
+            { label: 'Community hub', icon: ForumIcon, page: 'community' },
+          ];
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#F7F9F8] text-[#0B192C]">
@@ -266,10 +299,18 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
                   </p>
                   <p className="text-[11px] text-[#74817D] truncate">{user?.email}</p>
                   <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E8F0EC] text-[#35564E]">
-                    <span>{role === 'mentor' ? (user?.mentorVerificationStatus === 'verified' ? 'Verified mentor' : 'Mentor') : role === 'admin' ? 'Administrator' : 'Mentee'}</span>
+                    <span>{role === 'mentor' ? (user?.mentorVerificationStatus === 'verified' ? 'Verified mentor' : 'Mentor') : role === 'admin' ? 'Administrator' : role === 'ngo' ? 'NGO representative' : role === 'student' ? 'Student / volunteer' : 'Mentee'}</span>
                   </div>
                 </div>
                 <div className="py-1">
+                  {role !== 'admin' && (
+                    <button
+                      onClick={() => { setProfileOpen(false); navigate(role === 'ngo' ? 'ngo-dashboard' : 'profile'); }}
+                      className="w-full text-left px-4 py-2 text-xs font-semibold text-[#35564E] hover:bg-[#F0F4F2] flex items-center gap-2 cursor-pointer"
+                    >
+                      {role === 'ngo' ? 'Edit organization profile' : 'Edit profile'}
+                    </button>
+                  )}
                   <button
                     onClick={() => { setProfileOpen(false); navigate('home'); }}
                     className="w-full text-left px-4 py-2 text-xs font-medium text-[#0B192C] hover:bg-[#F0F4F2] flex items-center gap-2 cursor-pointer"
@@ -280,14 +321,14 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
                     onClick={() => { setProfileOpen(false); navigate('mentor-profile'); }}
                     className="w-full text-left px-4 py-2 text-xs font-medium text-[#0B192C] hover:bg-[#F0F4F2] flex items-center gap-2 cursor-pointer"
                   >
-                    Profile & mentors
+                    Mentor directory
                   </button>
-                  {role === 'admin' && (
+                  {(role === 'admin' || role === 'ngo') && (
                     <button
-                      onClick={() => { setProfileOpen(false); navigate('admin'); }}
+                      onClick={() => { setProfileOpen(false); navigate(role === 'admin' ? 'ngo-admin' : 'ngo-dashboard'); }}
                       className="w-full text-left px-4 py-2 text-xs font-medium text-[#0B192C] hover:bg-[#F0F4F2] flex items-center gap-2 cursor-pointer"
                     >
-                      Admin portal
+                      {role === 'admin' ? 'NGO verification' : 'NGO dashboard'}
                     </button>
                   )}
                 </div>
@@ -333,21 +374,6 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
             })}
           </nav>
 
-          {role === 'admin' && (
-            <div className="mt-auto px-3 pt-4 border-t border-[#E1E7E5]">
-              <button
-                onClick={() => navigate('admin')}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors w-full text-left cursor-pointer ${
-                  currentPage === 'admin'
-                    ? 'bg-[#E8F0EC] text-[#0B192C]'
-                    : 'text-[#74817D] hover:bg-[#F0F4F2] hover:text-[#0B192C]'
-                }`}
-              >
-                <AdminIcon active={currentPage === 'admin'} />
-                Admin Portal
-              </button>
-            </div>
-          )}
         </aside>
 
         {/* Mobile Slide-down / Drawer */}
@@ -380,19 +406,6 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
                   );
                 })}
 
-                {role === 'admin' && (
-                  <button
-                    onClick={() => { navigate('admin'); setMobileMenuOpen(false); }}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all w-full text-left cursor-pointer mt-auto border-t border-[#E1E7E5] pt-3 ${
-                      currentPage === 'admin'
-                        ? 'bg-[#E8F0EC] text-[#0B192C]'
-                        : 'text-[#74817D] hover:bg-[#F0F4F2] hover:text-[#0B192C]'
-                    }`}
-                  >
-                    <AdminIcon active={currentPage === 'admin'} />
-                    Admin Portal
-                  </button>
-                )}
               </nav>
             </div>
           </div>
@@ -406,43 +419,16 @@ export default function Layout({ navigate, children, currentPage }: LayoutProps)
 
       {/* Mobile Bottom Navigation Bar */}
       <nav className="md:hidden bg-[#FFFFFF] border-t border-[#E1E7E5] px-4 py-2 flex items-center justify-around shrink-0 z-20" aria-label="Mobile Navigation">
-        <button
-          onClick={() => navigate('dashboard')}
-          className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === 'dashboard' ? 'text-[#52796F]' : 'text-[#74817D]'}`}
-        >
-          <HomeIcon active={currentPage === 'dashboard'} />
-          <span>Feed</span>
-        </button>
-        <button
-          onClick={() => navigate('mentor-profile')}
-          className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === 'mentor-profile' ? 'text-[#52796F]' : 'text-[#74817D]'}`}
-        >
-          <MentorsIcon active={currentPage === 'mentor-profile'} />
-          <span>Mentors</span>
-        </button>
-        <button
-          onClick={() => navigate('forums')}
-          className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === 'forums' ? 'text-[#52796F]' : 'text-[#74817D]'}`}
-        >
-          <ForumIcon active={currentPage === 'forums'} />
-          <span>Forums</span>
-        </button>
-        <button
-          onClick={() => navigate('messages')}
-          className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === 'messages' ? 'text-[#52796F]' : 'text-[#74817D]'}`}
-        >
-          <MsgIcon active={currentPage === 'messages'} />
-          <span>Messages</span>
-        </button>
-        {role === 'admin' && (
+        {navLinks.slice(0, 4).map(({ label, icon: Icon, page }) => (
           <button
-            onClick={() => navigate('admin')}
-            className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === 'admin' ? 'text-[#52796F]' : 'text-[#74817D]'}`}
+            key={page}
+            onClick={() => navigate(page)}
+            className={`flex flex-col items-center gap-1 text-xs font-semibold cursor-pointer ${currentPage === page ? 'text-[#52796F]' : 'text-[#74817D]'}`}
           >
-            <AdminIcon active={currentPage === 'admin'} />
-            <span>Admin</span>
+            <Icon active={currentPage === page} />
+            <span>{label}</span>
           </button>
-        )}
+        ))}
       </nav>
     </div>
   );
@@ -460,6 +446,15 @@ function MentorsIcon({ active }: { active?: boolean }) {
   return (
     <svg className={`w-4 h-4 ${active ? 'text-[#52796F]' : 'text-[#74817D]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  );
+}
+
+function StudyNotesIcon({ active }: { active?: boolean }) {
+  return (
+    <svg className={`w-4 h-4 ${active ? 'text-[#52796F]' : 'text-[#74817D]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 3h9l4 4v14H6a2 2 0 01-2-2V5a2 2 0 012-2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h5M8 12h8M8 16h8" />
     </svg>
   );
 }

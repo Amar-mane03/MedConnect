@@ -5,13 +5,22 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
+require("dotenv").config({ path: path.join(__dirname, ".env.local") });
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
-const requiredProductionEnv = ["MONGO_URI", "EMAIL_USER", "EMAIL_PASS", "JWT_SECRET", "ADMIN_SECRET", "FRONTEND_URL"];
+const requiredProductionEnv = ["MONGO_URI", "JWT_SECRET", "ADMIN_SECRET", "FRONTEND_URL"];
 const placeholderValue = (value) => !value || /^(your-|replace-with|example\.)/i.test(value.trim());
 if (process.env.NODE_ENV === "production") {
   const missing = requiredProductionEnv.filter((name) => placeholderValue(process.env[name]));
-  if (missing.length > 0) throw new Error(`Missing production environment values: ${missing.join(", ")}`);
+  if (missing.length > 0) {
+    throw new Error(`Missing production environment values: ${missing.join(", ")}`);
+  }
+
+  const resendConfigured = !placeholderValue(process.env.RESEND_API_KEY) && !placeholderValue(process.env.EMAIL_FROM);
+  const smtpConfigured = !placeholderValue(process.env.EMAIL_USER) && !placeholderValue(process.env.EMAIL_PASS);
+  if (!resendConfigured && !smtpConfigured) {
+    throw new Error("Configure RESEND_API_KEY and EMAIL_FROM for email delivery, or EMAIL_USER and EMAIL_PASS for SMTP.");
+  }
 }
 
 const authRoutes = require("./routes/authRoutes");
@@ -24,6 +33,7 @@ const eventRoutes = require("./routes/eventRoutes");
 const resourceRoutes = require("./routes/resourceRoutes");
 const groupRoutes = require("./routes/groupRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const communityRoutes = require("./routes/communityRoutes");
 const User = require("./models/user");
 const { Conversation } = require("./models/Message");
 const { JWT_SECRET } = require("./middlewares/authMiddleware");
@@ -32,7 +42,35 @@ const app = express();
 const server = http.createServer(app);
 const frontendOrigin = (process.env.FRONTEND_URL || "http://localhost:8443").trim().replace(/\/$/, "");
 const frontendBuildDirectory = path.join(__dirname, "..", "Frontend", "dist");
-const io = new Server(server, { cors: { origin: frontendOrigin, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"] } });
+const frontendOrigins = new Set([frontendOrigin]);
+if (process.env.NODE_ENV !== "production") {
+  try {
+    const configuredOrigin = new URL(frontendOrigin);
+    if (configuredOrigin.hostname === "localhost" || configuredOrigin.hostname === "127.0.0.1") {
+      const alternateHost = configuredOrigin.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      configuredOrigin.hostname = alternateHost;
+      frontendOrigins.add(configuredOrigin.origin);
+    }
+  } catch (error) {
+    throw new Error(`FRONTEND_URL is not a valid origin: ${error.message}`);
+  }
+}
+function allowFrontendOrigin(origin, callback) {
+  const isLocalDevelopmentOrigin = process.env.NODE_ENV !== "production"
+    && /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin || "");
+  if (!origin || frontendOrigins.has(origin) || isLocalDevelopmentOrigin) return callback(null, true);
+  return callback(new Error("Origin is not allowed by the CORS policy."));
+}
+
+// Middleware
+// Initialize Socket.io for Real-Time Clinician Messaging
+const io = new Server(server, {
+  cors: {
+    origin: allowFrontendOrigin,
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+  },
+});
+
 app.set("io", io);
 
 io.use(async (socket, next) => {
@@ -62,7 +100,8 @@ io.on("connection", (socket) => {
   });
 });
 
-app.use(cors({ origin: frontendOrigin }));
+// Middlewares
+app.use(cors({ origin: allowFrontendOrigin }));
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/cases", caseRoutes);
@@ -74,19 +113,56 @@ app.use("/api/events", eventRoutes);
 app.use("/api/resources", resourceRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/community", communityRoutes);
 
-app.get("/health", (req, res) => res.json({ status: "ok", message: "MedConnect Clinical API & WebSocket Server is running", timestamp: new Date().toISOString() }));
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "MedConnect Clinical API & WebSocket Server is running",
+    timestamp: new Date().toISOString(),
+  });
+});
 app.use(express.static(frontendBuildDirectory));
 app.use((req, res, next) => {
   if (req.method !== "GET" || req.path === "/api" || req.path.startsWith("/api/")) return next();
   res.sendFile(path.join(frontendBuildDirectory, "index.html"));
 });
 
+// MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
-const PORT = process.env.PORT || 5000;
-mongoose.connect(MONGO_URI).then(() => {
-  console.log("MongoDB connected successfully");
-  server.listen(PORT, () => console.log(`Server and Socket.io listening on port ${PORT}`));
-}).catch((error) => {
-  console.error("MongoDB connection failed:", error.message);
+const uriDatabaseName = MONGO_URI
+  ? decodeURIComponent(new URL(MONGO_URI).pathname.replace(/^\/+|\/+$/g, ""))
+  : "";
+const MONGO_DB_NAME = process.env.MONGO_DB_NAME?.trim() || uriDatabaseName || "test";
+const PORT = Number.parseInt(process.env.PORT || "5000", 10);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  throw new Error("PORT must be a valid TCP port between 1 and 65535.");
+}
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. Stop the other server or configure a different PORT.`);
+  } else {
+    console.error("HTTP server failed to start:", error.message);
+  }
+  process.exit(1);
 });
+
+async function startServer() {
+  try {
+    await mongoose.connect(MONGO_URI, { dbName: MONGO_DB_NAME });
+    console.log(`MongoDB connected successfully to database "${mongoose.connection.name}"`);
+    server.listen(PORT, () => {
+      console.log(`Server and Socket.io listening on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    process.exitCode = 1;
+  }
+}
+
+if (require.main === module) {
+  void startServer();
+}
+
+module.exports = app;

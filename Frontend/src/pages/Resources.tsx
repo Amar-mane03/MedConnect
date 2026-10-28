@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import type { Page } from '../App';
 import API, { SOCKET_URL } from '../api';
@@ -18,6 +18,7 @@ interface ResourceItem {
   url: string;
   fileName?: string;
   fileSize?: string;
+  isUploaded?: boolean;
   specialty: string;
   tags: string[];
   uploader: string;
@@ -85,11 +86,14 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
   const [newDescription, setNewDescription] = useState('');
   const [newType, setNewType] = useState<'pdf' | 'link' | 'article' | 'notes' | 'guideline'>('pdf');
   const [newUrl, setNewUrl] = useState('');
-  const [newFileName, setNewFileName] = useState('');
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newSpecialty, setNewSpecialty] = useState('Cardiology');
   const [newTags, setNewTags] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const fetchResourcesRef = useRef<() => Promise<void>>(async () => {});
 
   // Fetch resources
   const fetchResources = async () => {
@@ -121,6 +125,7 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
       setLoading(false);
     }
   };
+  fetchResourcesRef.current = fetchResources;
 
   useEffect(() => {
     fetchResources();
@@ -131,13 +136,7 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
     let socket: Socket | null = null;
     try {
       socket = io(SOCKET_URL);
-      socket.on('new_resource_shared', (newResource: ResourceItem) => {
-        setResources(prev => {
-          const exists = prev.some(r => (r.id || r._id) === (newResource.id || newResource._id));
-          if (exists) return prev;
-          return [newResource, ...prev];
-        });
-      });
+      socket.on('new_resource_shared', () => { void fetchResourcesRef.current(); });
     } catch (e) {
       console.error('Socket error in Resources:', e);
     }
@@ -173,6 +172,28 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
 
   const handleDownloadClick = async (resource: ResourceItem) => {
     const id = resource.id || resource._id;
+    setDownloadError(null);
+    if (resource.isUploaded && id) {
+      try {
+        const response = await API.get(`/resources/${id}/file`, { responseType: 'blob' });
+        const downloadUrl = window.URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = resource.fileName || resource.title;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
+        setResources(prev =>
+          prev.map(r => (r.id || r._id) === id ? { ...r, downloadsCount: (r.downloadsCount || 0) + 1 } : r)
+        );
+      } catch (err) {
+        console.error('Download resource file error:', err);
+        setDownloadError('Unable to download this document. Please try again.');
+      }
+      return;
+    }
+
     if (id) {
       try {
         await API.post(`/resources/${id}/download`);
@@ -184,6 +205,8 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
         );
       } catch (err) {
         console.error('Download count error:', err);
+        setDownloadError('Unable to open this resource. Please try again.');
+        return;
       }
     }
     window.open(resource.url, '_blank');
@@ -195,8 +218,12 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
       setFormError('Please provide a title for the resource.');
       return;
     }
-    if (!newUrl.trim()) {
-      setFormError('Please enter a valid document URL or link.');
+    if (newType === 'pdf' && !newFile) {
+      setFormError('Choose a PDF or Word document to upload.');
+      return;
+    }
+    if (newType !== 'pdf' && !newUrl.trim()) {
+      setFormError('Enter a resource URL for the selected format.');
       return;
     }
 
@@ -204,25 +231,36 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
     setFormError(null);
 
     try {
-      const res = await API.post('/resources', {
+      const resourceDetails = {
         title: newTitle.trim(),
         description: newDescription.trim(),
         resourceType: newType,
-        url: newUrl.trim(),
-        fileName: newFileName.trim() || `${newTitle.trim().replace(/\s+/g, '_')}.pdf`,
-        fileSize: '2.5 MB',
+        url: newType === 'pdf' ? '' : newUrl.trim(),
         specialty: newSpecialty,
         tags: newTags.split(',').map(t => t.trim()).filter(Boolean),
-      });
+      };
+      let payload: FormData | typeof resourceDetails;
+      if (newType === 'pdf' && newFile) {
+        const formData = new FormData();
+        Object.entries(resourceDetails).forEach(([key, value]) => {
+          formData.append(key, key === 'tags' ? JSON.stringify(value) : String(value));
+        });
+        formData.append('file', newFile);
+        payload = formData;
+      } else {
+        payload = resourceDetails;
+      }
+      const res = await API.post('/resources', payload, { timeout: 60_000 });
 
       if (res.data?.resource) {
-        setResources(prev => [res.data.resource, ...prev]);
         setShareModalOpen(false);
         setNewTitle('');
         setNewDescription('');
         setNewUrl('');
-        setNewFileName('');
+        setNewFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setNewTags('');
+        await fetchResources();
       }
     } catch (err: any) {
       console.error('Share resource error:', err);
@@ -252,6 +290,13 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
             Share material
           </button>
         </div>
+
+        {downloadError && (
+          <div role="alert" className="mb-6 flex items-center justify-between gap-3 border border-[#C04A36]/30 bg-[#FDEEEB] px-4 py-3 text-sm text-[#9B3F35]">
+            <span>{downloadError}</span>
+            <button type="button" onClick={() => setDownloadError(null)} aria-label="Dismiss download error">✕</button>
+          </div>
+        )}
 
         {/* Filter Bar: Specialties & Search */}
         <div className="space-y-4 mb-6">
@@ -497,10 +542,17 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
                 <label className="block text-xs font-bold text-[#0B192C] mb-1.5">Format Type</label>
                 <select
                   value={newType}
-                  onChange={e => setNewType(e.target.value as any)}
+                  onChange={e => {
+                    const type = e.target.value as typeof newType;
+                    setNewType(type);
+                    if (type !== 'pdf') {
+                      setNewFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }
+                  }}
                   className="w-full p-3 text-xs bg-[#F0F4F2] rounded-lg border border-[#E1E7E5] text-[#0B192C] focus:outline-none focus:ring-2 focus:ring-[#52796F]/20"
                 >
-                  <option value="pdf">PDF Document / Algorithm</option>
+                  <option value="pdf">PDF or Word Document</option>
                   <option value="guideline">Official Clinical Guideline</option>
                   <option value="notes">Examination Notes & Cheat Sheets</option>
                   <option value="article">Medical Research Paper</option>
@@ -519,16 +571,41 @@ export default function ResourcesPage({ navigate }: ResourcesProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#0B192C] mb-1.5">URL / Direct Link</label>
-                <input
-                  type="url"
-                  placeholder="https://example.org/clinical-notes.pdf"
-                  value={newUrl}
-                  onChange={e => setNewUrl(e.target.value)}
-                  className="w-full p-3 text-xs sm:text-sm bg-[#F0F4F2] rounded-lg border border-[#E1E7E5] text-[#0B192C] placeholder-[#74817D] focus:outline-none focus:ring-2 focus:ring-[#52796F]/20 focus:bg-white"
-                />
-              </div>
+              {newType === 'pdf' ? (
+                <div>
+                  <label htmlFor="resource-document" className="block text-xs font-bold text-[#0B192C] mb-1.5">Upload a PDF or Word document (up to 10 MB)</label>
+                  <input
+                    ref={fileInputRef}
+                    id="resource-document"
+                    type="file"
+                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={e => {
+                      const file = e.target.files?.[0] || null;
+                      if (file && file.size > 10 * 1024 * 1024) {
+                        setFormError('Documents must be 10 MB or smaller.');
+                        e.target.value = '';
+                        setNewFile(null);
+                        return;
+                      }
+                      setFormError(null);
+                      setNewFile(file);
+                    }}
+                    className="w-full p-3 text-xs sm:text-sm bg-[#F0F4F2] rounded-lg border border-[#E1E7E5] text-[#0B192C] file:mr-3 file:rounded file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold"
+                  />
+                  {newFile && <p className="mt-1 text-xs text-[#52616C]">Selected: {newFile.name}</p>}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-[#0B192C] mb-1.5">Resource URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.org/clinical-resource"
+                    value={newUrl}
+                    onChange={e => setNewUrl(e.target.value)}
+                    className="w-full p-3 text-xs sm:text-sm bg-[#F0F4F2] rounded-lg border border-[#E1E7E5] text-[#0B192C] placeholder-[#74817D] focus:outline-none focus:ring-2 focus:ring-[#52796F]/20 focus:bg-white"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-[#0B192C] mb-1.5">Tags (comma separated)</label>

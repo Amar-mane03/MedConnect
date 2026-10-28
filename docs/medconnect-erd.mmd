@@ -1,0 +1,266 @@
+%%{init: {"theme":"neutral","er":{"diagramPadding":30}}}%%
+erDiagram
+    %% Logical model derived from Backend/models and active backend usage.
+    %% PK is MongoDB's generated _id. FK marks an ObjectId document reference,
+    %% not a MongoDB-enforced relational foreign-key constraint.
+    %% Arrays and nested objects remain inside their parent document; they are
+    %% shown as attributes, not as separate collections.
+
+    User {
+        ObjectId _id PK
+        String name "required"
+        String email "required; unique"
+        String password "optional"
+        String role
+        String specialty
+        String mentorVerificationStatus
+        ObjectId savedCaseStudies FK "array of CaseStudy refs"
+        Date createdAt
+        Date updatedAt
+    }
+
+    NGO {
+        ObjectId _id PK
+        ObjectId owner FK "required; unique"
+        String name "required"
+        String mission "required"
+        String location "required"
+        String verificationStatus
+        CampaignArray campaigns "embedded; no subdocument _id"
+        Date createdAt
+        Date updatedAt
+    }
+
+    Camp {
+        ObjectId _id PK
+        ObjectId ngo FK "required"
+        String title "required"
+        String causeCategory "required"
+        Date startAt "required"
+        Date endAt "required"
+        String venue "required"
+        Number capacity "required"
+        Boolean isPublished
+        Date createdAt
+        Date updatedAt
+    }
+
+    CampApplication {
+        ObjectId _id PK
+        ObjectId camp FK "required"
+        ObjectId student FK "required; User"
+        String statement "required"
+        String status
+        String consentStatus
+        Number volunteerHours
+        Date createdAt
+        Date updatedAt
+    }
+
+    CampQuestion {
+        ObjectId _id PK
+        ObjectId camp FK "required"
+        ObjectId author FK "required; User"
+        String body "required"
+        ReplyArray replies "embedded; author -> User"
+        Date createdAt
+        Date updatedAt
+    }
+
+    CampAnnouncement {
+        ObjectId _id PK
+        ObjectId camp FK "required"
+        ObjectId ngo FK "required"
+        ObjectId sentBy FK "required; User"
+        String subject "required"
+        String body "required"
+        Number recipientCount
+        Date createdAt
+        Date updatedAt
+    }
+
+    CampReport {
+        ObjectId _id PK
+        ObjectId camp FK "required; unique"
+        ObjectId ngo FK "required"
+        ObjectId submittedBy FK "required; User"
+        Number beneficiariesServed "required"
+        Number volunteersAttended "required"
+        ObjectId attendeeApplicationIds FK "array of CampApplication refs"
+        Date createdAt
+        Date updatedAt
+    }
+
+    CaseStudy {
+        ObjectId _id PK
+        ObjectId author FK "required; User"
+        String title "required"
+        String specialty "required"
+        String preview "required"
+        ObjectId upvotes FK "array of User refs"
+        String status
+        Date createdAt
+        Date updatedAt
+    }
+
+    Comment {
+        ObjectId _id PK
+        ObjectId caseId FK "required; CaseStudy"
+        ObjectId author FK "required; User"
+        String text "required"
+        ObjectId likes FK "array of User refs"
+        String moderationStatus
+        Date createdAt
+        Date updatedAt
+    }
+
+    ContentReport {
+        ObjectId _id PK
+        ObjectId reporter FK "required; User"
+        String targetType "case or comment"
+        ObjectId targetId "generic target; no ref declared"
+        ObjectId caseId FK "required; CaseStudy"
+        ObjectId reviewedBy FK "optional; User"
+        String reason "required"
+        String status
+        Date createdAt
+        Date updatedAt
+    }
+
+    MentorshipRequest {
+        ObjectId _id PK
+        ObjectId mentee FK "required; User"
+        ObjectId mentor FK "required; User"
+        String status
+        String goals
+        String note
+        Date createdAt
+        Date updatedAt
+    }
+
+    ForumPost {
+        ObjectId _id PK
+        ObjectId author FK "required; User"
+        String title "required"
+        String content "required"
+        String category
+        String tags "array"
+        ObjectId upvotedUsers FK "array of User refs"
+        ReplyArray replies "embedded; author/likes -> User"
+        Boolean isPinned
+        Date createdAt
+        Date updatedAt
+    }
+
+    Group {
+        ObjectId _id PK
+        ObjectId createdBy FK "required; User"
+        ObjectId memberIds FK "array of User refs"
+        String name "required"
+        String description "required"
+        PostArray posts "embedded; author/likes -> User"
+        Date createdAt
+        Date updatedAt
+    }
+
+    Event {
+        ObjectId _id PK
+        ObjectId host FK "required; User"
+        ObjectId attendeeIds FK "array of User refs"
+        String title "required"
+        String speakerName "required"
+        Date date "required"
+        Number durationMinutes
+        String eventType
+        Date createdAt
+        Date updatedAt
+    }
+
+    Resource {
+        ObjectId _id PK
+        ObjectId uploader FK "required; User"
+        ObjectId likes FK "array of User refs"
+        String title "required"
+        String resourceType
+        String url
+        String specialty
+        Number downloadsCount
+        Date createdAt
+        Date updatedAt
+    }
+
+    Conversation {
+        ObjectId _id PK
+        ObjectId participants FK "array of User refs"
+        String lastMessage
+        Date lastMessageAt
+        Map unreadCounts "User-id keys to Number"
+        Date createdAt
+        Date updatedAt
+    }
+
+    Message {
+        ObjectId _id PK
+        ObjectId conversationId FK "required; Conversation"
+        ObjectId sender FK "required; User"
+        ObjectId recipient FK "required; User"
+        String text "required"
+        Boolean isRead
+        Date createdAt
+        Date updatedAt
+    }
+
+    Notification {
+        ObjectId _id PK
+        ObjectId recipient FK "required; User"
+        ObjectId actor FK "optional; User"
+        String category "required"
+        String title "required"
+        String message "required"
+        String page "required"
+        String targetId "string; not a declared ref"
+        Date readAt
+        Date createdAt
+        Date updatedAt
+    }
+
+    %% CampApplication also declares a unique compound index on (camp, student).
+    User ||--o| NGO : owns
+    NGO ||--o{ Camp : organizes
+    Camp ||--o{ CampApplication : applications
+    User ||--o{ CampApplication : student
+    Camp ||--o{ CampQuestion : questions
+    User ||--o{ CampQuestion : author
+    Camp ||--o{ CampAnnouncement : announcements
+    NGO ||--o{ CampAnnouncement : ngo
+    User ||--o{ CampAnnouncement : sender
+    Camp ||--o| CampReport : report
+    NGO ||--o{ CampReport : ngo
+    User ||--o{ CampReport : submits
+    CampReport }o--o{ CampApplication : attendees
+
+    User ||--o{ CaseStudy : author
+    User }o--o{ CaseStudy : saved_or_voted
+    CaseStudy ||--o{ Comment : comments
+    User ||--o{ Comment : author
+    User }o--o{ Comment : likes
+    User ||--o{ ContentReport : reporter
+    User o|--o{ ContentReport : reviewer
+    CaseStudy ||--o{ ContentReport : case
+    User ||--o{ MentorshipRequest : mentor_or_mentee
+
+    User ||--o{ ForumPost : author
+    User }o--o{ ForumPost : upvotes
+    User ||--o{ Group : creator
+    User }o--o{ Group : members
+    User ||--o{ Event : host
+    User }o--o{ Event : attendees
+    User ||--o{ Resource : uploader
+    User }o--o{ Resource : likes
+
+    User }o--o{ Conversation : participants
+    Conversation ||--o{ Message : messages
+    User ||--o{ Message : sender
+    User ||--o{ Message : recipient
+    User ||--o{ Notification : recipient
+    User o|--o{ Notification : actor

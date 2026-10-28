@@ -8,7 +8,7 @@ const multer = require("multer");
 const { OAuth2Client } = require("google-auth-library");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user");
-const { requireAuth, JWT_SECRET } = require("../middlewares/authMiddleware");
+const { requireAuth, requireAuthAllowUnverified, JWT_SECRET } = require("../middlewares/authMiddleware");
 
 const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -29,6 +29,35 @@ const credentialUpload = multer({
 });
 
 const sendVerificationEmail = async (user, token) => {
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/\/$/, "");
+  const verificationLink = `${frontendUrl}/verify-email/${token}`;
+  const subject = "MedConnect - Verify your email";
+  const html = `<div style="font-family: Arial, sans-serif;"><h2>Verify your MedConnect email</h2><p>Hello ${user.name},</p><p>Confirm your email address to finish creating your account.</p><a href="${verificationLink}" style="display:inline-block;padding:12px 20px;background:#0D9488;color:white;text-decoration:none;border-radius:6px;">Verify email</a><p>This link expires in 24 hours.</p></div>`;
+
+  if(process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM,
+        to: [user.email],
+        subject,
+        html
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if(!response.ok) {
+      const details = await response.text();
+      throw new Error(`Resend API returned ${response.status}: ${details}`);
+    }
+
+    return true;
+  }
+
   if(!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     return false;
   }
@@ -41,14 +70,11 @@ const sendVerificationEmail = async (user, token) => {
     }
   });
 
-  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/\/$/, "");
-  const verificationLink = `${frontendUrl}/verify-email/${token}`;
-
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
     to: user.email,
-    subject: "MedConnect - Verify your email",
-    html: `<div style="font-family: Arial, sans-serif;"><h2>Verify your MedConnect email</h2><p>Hello ${user.name},</p><p>Confirm your email address to finish creating your account.</p><a href="${verificationLink}" style="display:inline-block;padding:12px 20px;background:#0D9488;color:white;text-decoration:none;border-radius:6px;">Verify email</a><p>This link expires in 24 hours.</p></div>`
+    subject,
+    html
   });
 
   return true;
@@ -66,7 +92,8 @@ router.post("/signup", async(req, res) =>{
           role,
           careerStage,
           goals,
-          communicationPreference
+          communicationPreference,
+          dateOfBirth
         } = req.body;
 
     //check required fields
@@ -100,9 +127,23 @@ router.post("/signup", async(req, res) =>{
 
     //create user
 
-    const requestedRole = ["mentor", "mentee", "admin"].includes(role) ? role : "mentee";
-    const hasAdminSecret = Boolean(process.env.ADMIN_SECRET) && req.body.adminSecret === process.env.ADMIN_SECRET;
-    const assignedRole = requestedRole === "admin" ? (hasAdminSecret ? "admin" : "mentee") : requestedRole;
+    const requestedRole = ["mentor", "mentee", "student", "ngo", "admin"].includes(role) ? role : "student";
+    if (requestedRole === "admin" && !process.env.ADMIN_SECRET) {
+      return res.status(503).json({
+        message: "Administrator signup is not configured. Add ADMIN_SECRET to Backend/.env and restart the backend.",
+      });
+    }
+    if (requestedRole === "admin" && req.body.adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({ message: "The development administrator secret is incorrect." });
+    }
+    const assignedRole = requestedRole;
+    let parsedDateOfBirth = null;
+    if (["student", "mentee"].includes(assignedRole)) {
+      parsedDateOfBirth = new Date(dateOfBirth);
+      if (!dateOfBirth || Number.isNaN(parsedDateOfBirth.getTime()) || parsedDateOfBirth >= new Date()) {
+        return res.status(400).json({ message: "Enter a valid date of birth before creating a student account." });
+      }
+    }
 
     const user = await User.create({
       name,
@@ -119,6 +160,7 @@ router.post("/signup", async(req, res) =>{
       careerStage: careerStage || "",
       goals: goals || "",
       communicationPreference: communicationPreference || "",
+      dateOfBirth: parsedDateOfBirth,
       mentorVerificationStatus: assignedRole === "mentor" ? "pending" : (assignedRole === "admin" ? "verified" : "not_required"),
       emailVerified: false,
       emailVerificationToken: crypto.randomBytes(32).toString("hex"),
@@ -137,7 +179,12 @@ router.post("/signup", async(req, res) =>{
     res.status(201).json({
       message: verificationEmailSent
         ? "Account created successfully. Check your inbox to verify your email."
-        : "Account created, but the verification email could not be sent. Configure EMAIL_USER and EMAIL_PASS, then resend it.",
+        : process.env.NODE_ENV === "production"
+          ? "Account created, but verification email delivery is not configured. Please contact the administrator or try again later."
+          : "Account created. Email delivery is not configured; use the local verification link to finish setup.",
+      ...(!verificationEmailSent && process.env.NODE_ENV !== "production" ? {
+        verificationUrl: `${(process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/\/$/, "")}/verify-email/${user.emailVerificationToken}`,
+      } : {}),
       token,
       user: {
         id: user._id,
@@ -161,7 +208,8 @@ router.post("/signup", async(req, res) =>{
 
 router.post("/google", async(req, res) => {
   try {
-    const { credential, role = "mentee" } = req.body;
+    const { credential } = req.body;
+    const requestedRole = ["mentor", "mentee", "student", "ngo"].includes(req.body.role) ? req.body.role : "student";
 
     if(!process.env.GOOGLE_CLIENT_ID) {
       return res.status(503).json({ message: "Google sign-in is not configured yet" });
@@ -190,8 +238,8 @@ router.post("/google", async(req, res) => {
         email: payload.email.toLowerCase(),
         googleId: payload.sub,
         emailVerified: true,
-        role,
-        mentorVerificationStatus: role === "mentor" ? "pending" : "not_required"
+        role: requestedRole,
+        mentorVerificationStatus: requestedRole === "mentor" ? "pending" : "not_required"
       });
     } else {
       user.googleId = payload.sub;
@@ -249,12 +297,25 @@ router.post("/resend-verification", async(req, res) => {
     const user = await User.findOne({ email: normalizedEmail });
 
     if(user && !user.emailVerified) {
+      const previousToken = user.emailVerificationToken;
+      const previousExpires = user.emailVerificationExpires;
       user.emailVerificationToken = crypto.randomBytes(32).toString("hex");
       user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
       await user.save();
-      const emailSent = await sendVerificationEmail(user, user.emailVerificationToken);
-      if(!emailSent) {
-        return res.status(503).json({ message: "Verification email delivery is not configured. Please contact the administrator." });
+
+      try {
+        const emailSent = await sendVerificationEmail(user, user.emailVerificationToken);
+        if(!emailSent) {
+          throw new Error("Verification email delivery is not configured");
+        }
+      } catch(emailError) {
+        user.emailVerificationToken = previousToken;
+        user.emailVerificationExpires = previousExpires;
+        await user.save();
+        console.error("Resend verification delivery error:", emailError);
+        return res.status(503).json({
+          message: "Verification email delivery is unavailable. Please try again later or contact support."
+        });
       }
     }
 
@@ -265,7 +326,7 @@ router.post("/resend-verification", async(req, res) => {
   }
 });
 
-router.post("/onboarding", requireAuth, async(req, res) => {
+router.post("/onboarding", requireAuthAllowUnverified, async(req, res) => {
   try {
     const { careerStage, goals, communicationPreference } = req.body;
 
@@ -290,7 +351,7 @@ router.post("/onboarding", requireAuth, async(req, res) => {
   }
 });
 
-router.post("/mentor-credentials", requireAuth, credentialUpload.single("credential"), async(req, res) => {
+router.post("/mentor-credentials", requireAuthAllowUnverified, credentialUpload.single("credential"), async(req, res) => {
   try {
     if(!req.file) {
       return res.status(400).json({ message: "A credential file is required" });
@@ -362,7 +423,7 @@ router.post("/login", async(req, res) => {
       });
     }
 
-    if(!user.emailVerified){
+    if(user.emailVerified === false && user.emailVerificationToken){
       return res.status(403).json({
         message: "Please verify your email before signing in."
       });
@@ -398,6 +459,57 @@ router.get("/me", requireAuth, async (req, res) => {
   res.json({
     user: req.user
   });
+});
+
+router.patch("/profile", requireAuth, async (req, res) => {
+  if (!["student", "mentee", "mentor"].includes(req.user.role)) {
+    return res.status(403).json({ message: "Personal profile editing is not available for this account role." });
+  }
+  const profileFields = {
+    name: { maxLength: 100 },
+    bio: { maxLength: 1000 },
+    location: { maxLength: 120 },
+    specialty: { maxLength: 120 },
+    subspecialty: { maxLength: 120 },
+    careerStage: { maxLength: 120 },
+    institution: { maxLength: 160 },
+    hospital: { maxLength: 160 },
+    degrees: { maxLength: 240 },
+    goals: { maxLength: 1000 },
+    communicationPreference: { maxLength: 120 },
+  };
+  const allowedFields = req.user.role === "mentor"
+    ? ["name", "bio", "location", "specialty", "subspecialty", "hospital", "degrees"]
+    : ["name", "bio", "location", "specialty", "careerStage", "institution", "goals", "communicationPreference"];
+  const updates = {};
+
+  for (const field of allowedFields) {
+    if (req.body[field] === undefined) continue;
+    if (typeof req.body[field] !== "string" || req.body[field].length > profileFields[field].maxLength) {
+      return res.status(400).json({ message: `${field} must be text no longer than ${profileFields[field].maxLength} characters.` });
+    }
+    updates[field] = req.body[field].trim();
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ message: "Provide at least one profile field to update." });
+  }
+  if (updates.name !== undefined && updates.name.length < 2) {
+    return res.status(400).json({ message: "Name must contain at least 2 characters." });
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updates },
+      { new: true, runValidators: true, select: "-password -resetPasswordToken -resetPasswordExpires -emailVerificationToken -mentorCredentialPath" }
+    );
+    if (!user) return res.status(404).json({ message: "Account profile not found." });
+    res.json({ user, message: "Profile updated successfully." });
+  } catch (error) {
+    console.error("Update account profile error:", error);
+    res.status(500).json({ message: "Unable to update your profile." });
+  }
 });
 
 //forgot-password

@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1660" viewBox="0 0 2200 1660">
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#163247}.title{font-size:36px;font-weight:700}.sub{font-size:18px;fill:#587184}.panel{fill:#f4f8fb;stroke:#d4e0e8;stroke-width:2}.box{fill:#fff;stroke:#b9cbd7;stroke-width:2}.band{fill:#e6f1f6}.label{font-size:19px;font-weight:700}.field{font-size:15px;fill:#355267}.domain{font-size:20px;font-weight:700;fill:#246b72}.relation{font-size:15px;fill:#294c61}.muted{font-size:14px;fill:#5a7587}.pk{font-weight:700;fill:#125f58}.fk{font-weight:700;fill:#7257a2}.rule{stroke:#d6e1e8;stroke-width:1.5}
+    </style>
+  </defs>
+  <rect width="2200" height="1660" fill="#f7fafc"/>
+  <text x="60" y="65" class="title">MedConnect — Logical Entity-Relationship Diagram</text>
+  <text x="60" y="98" class="sub">Core MongoDB collections and their principal attributes and references (ObjectId)</text>
+  <text x="60" y="128" class="muted"><tspan class="pk">PK</tspan> = document identifier (_id)  •  <tspan class="fk">FK</tspan> = logical ObjectId reference  •  Embedded subdocuments are identified below</text>
+
+  <!-- Five domain panels -->
+  <rect x="45" y="155" width="405" height="1195" rx="16" class="panel"/>
+  <rect x="475" y="155" width="405" height="1195" rx="16" class="panel"/>
+  <rect x="905" y="155" width="405" height="1195" rx="16" class="panel"/>
+  <rect x="1335" y="155" width="405" height="1195" rx="16" class="panel"/>
+  <rect x="1765" y="155" width="390" height="1195" rx="16" class="panel"/>
+  <text x="65" y="191" class="domain">Identity &amp; mentorship</text>
+  <text x="495" y="191" class="domain">Clinical knowledge</text>
+  <text x="925" y="191" class="domain">Community &amp; learning</text>
+  <text x="1355" y="191" class="domain">Messaging &amp; alerts</text>
+  <text x="1785" y="191" class="domain">NGO volunteer camps</text>
+
+  <!-- Reusable table styling is applied directly to each entity card -->
+  <!-- Identity -->
+  <rect x="65" y="210" width="365" height="280" rx="10" class="box"/><path d="M65 250H430" class="rule"/>
+  <rect x="65" y="210" width="365" height="40" rx="10" class="band"/><text x="82" y="237" class="label">User</text>
+  <text x="82" y="278" class="field"><tspan class="pk">PK</tspan> _id</text><text x="82" y="302" class="field">name, email (unique), password?, googleId</text>
+  <text x="82" y="326" class="field">role, specialty, hospital, location, bio</text><text x="82" y="350" class="field">mentorVerificationStatus, credentials</text>
+  <text x="82" y="374" class="field"><tspan class="fk">FK[]</tspan> savedCaseStudies → CaseStudy</text><text x="82" y="398" class="field">notificationPreferences, profile statistics</text>
+  <text x="82" y="422" class="field">Embedded: publications[], reviews[]</text><text x="82" y="458" class="muted">Roles: mentor, mentee, student, NGO, admin</text>
+
+  <rect x="65" y="515" width="365" height="165" rx="10" class="box"/><path d="M65 555H430" class="rule"/>
+  <rect x="65" y="515" width="365" height="40" rx="10" class="band"/><text x="82" y="542" class="label">MentorshipRequest</text>
+  <text x="82" y="583" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> mentee → User</text><text x="82" y="607" class="field"><tspan class="fk">FK</tspan> mentor → User  •  status</text>
+  <text x="82" y="631" class="field">goals, note, timestamps</text>
+
+  <rect x="65" y="705" width="365" height="195" rx="10" class="box"/><path d="M65 745H430" class="rule"/>
+  <rect x="65" y="705" width="365" height="40" rx="10" class="band"/><text x="82" y="732" class="label">NGO</text>
+  <text x="82" y="773" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> owner → User (unique)</text><text x="82" y="797" class="field">name, mission, location, website</text>
+  <text x="82" y="821" class="field">verificationStatus, verificationDocPath</text><text x="82" y="845" class="field">causeTags, impact counters</text>
+  <text x="82" y="869" class="field">Embedded: campaigns[]</text>
+
+  <!-- Clinical -->
+  <rect x="495" y="210" width="365" height="260" rx="10" class="box"/><path d="M495 250H860" class="rule"/>
+  <rect x="495" y="210" width="365" height="40" rx="10" class="band"/><text x="512" y="237" class="label">CaseStudy</text>
+  <text x="512" y="278" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> author → User</text><text x="512" y="302" class="field">title, specialty, subspecialty, preview</text>
+  <text x="512" y="326" class="field">history, investigations, diagnosis</text><text x="512" y="350" class="field">treatment, outcome, learningPoints[]</text>
+  <text x="512" y="374" class="field"><tspan class="fk">FK[]</tspan> upvotes → User</text><text x="512" y="398" class="field">status, timestamps</text>
+
+  <rect x="495" y="495" width="365" height="190" rx="10" class="box"/><path d="M495 535H860" class="rule"/>
+  <rect x="495" y="495" width="365" height="40" rx="10" class="band"/><text x="512" y="522" class="label">Comment</text>
+  <text x="512" y="563" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> caseId → CaseStudy</text><text x="512" y="587" class="field"><tspan class="fk">FK</tspan> author → User  •  text</text>
+  <text x="512" y="611" class="field"><tspan class="fk">FK[]</tspan> likes → User</text><text x="512" y="635" class="field">moderationStatus, timestamps</text>
+
+  <rect x="495" y="710" width="365" height="220" rx="10" class="box"/><path d="M495 750H860" class="rule"/>
+  <rect x="495" y="710" width="365" height="40" rx="10" class="band"/><text x="512" y="737" class="label">ContentReport</text>
+  <text x="512" y="778" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> reporter → User</text><text x="512" y="802" class="field"><tspan class="fk">FK</tspan> caseId → CaseStudy</text>
+  <text x="512" y="826" class="field"><tspan class="fk">FK?</tspan> reviewedBy → User</text><text x="512" y="850" class="field">targetType + targetId (case/comment)</text>
+  <text x="512" y="874" class="field">reason, details, status, reviewedAt</text>
+
+  <!-- Community and learning -->
+  <rect x="925" y="210" width="365" height="190" rx="10" class="box"/><path d="M925 250H1290" class="rule"/>
+  <rect x="925" y="210" width="365" height="40" rx="10" class="band"/><text x="942" y="237" class="label">ForumPost</text>
+  <text x="942" y="278" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> author → User</text><text x="942" y="302" class="field">title, content, category, tags[]</text>
+  <text x="942" y="326" class="field"><tspan class="fk">FK[]</tspan> upvotedUsers → User</text><text x="942" y="350" class="field">Embedded: replies[] (author, likes)</text><text x="942" y="374" class="field">upvotes, isPinned</text>
+
+  <rect x="925" y="425" width="365" height="180" rx="10" class="box"/><path d="M925 465H1290" class="rule"/>
+  <rect x="925" y="425" width="365" height="40" rx="10" class="band"/><text x="942" y="452" class="label">Group</text>
+  <text x="942" y="493" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> createdBy → User</text><text x="942" y="517" class="field">name, description, specialty</text>
+  <text x="942" y="541" class="field"><tspan class="fk">FK[]</tspan> memberIds → User</text><text x="942" y="565" class="field">Embedded: posts[] (author, likes)</text>
+
+  <rect x="925" y="630" width="365" height="180" rx="10" class="box"/><path d="M925 670H1290" class="rule"/>
+  <rect x="925" y="630" width="365" height="40" rx="10" class="band"/><text x="942" y="657" class="label">Event</text>
+  <text x="942" y="698" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> host → User</text><text x="942" y="722" class="field">title, date, duration, eventType</text>
+  <text x="942" y="746" class="field">speaker details, specialty, meetingLink</text><text x="942" y="770" class="field"><tspan class="fk">FK[]</tspan> attendeeIds → User</text>
+
+  <rect x="925" y="835" width="365" height="195" rx="10" class="box"/><path d="M925 875H1290" class="rule"/>
+  <rect x="925" y="835" width="365" height="40" rx="10" class="band"/><text x="942" y="862" class="label">Resource</text>
+  <text x="942" y="903" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> uploader → User</text><text x="942" y="927" class="field">title, resourceType, URL / file metadata</text>
+  <text x="942" y="951" class="field">description, specialty, tags[]</text><text x="942" y="975" class="field"><tspan class="fk">FK[]</tspan> likes → User  •  downloadsCount</text>
+
+  <!-- Communications -->
+  <rect x="1355" y="210" width="365" height="165" rx="10" class="box"/><path d="M1355 250H1720" class="rule"/>
+  <rect x="1355" y="210" width="365" height="40" rx="10" class="band"/><text x="1372" y="237" class="label">Conversation</text>
+  <text x="1372" y="278" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK[]</tspan> participants → User</text><text x="1372" y="302" class="field">lastMessage, lastMessageAt</text>
+  <text x="1372" y="326" class="field">unreadCounts</text>
+
+  <rect x="1355" y="405" width="365" height="190" rx="10" class="box"/><path d="M1355 445H1720" class="rule"/>
+  <rect x="1355" y="405" width="365" height="40" rx="10" class="band"/><text x="1372" y="432" class="label">Message</text>
+  <text x="1372" y="473" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> conversationId → Conversation</text><text x="1372" y="497" class="field"><tspan class="fk">FK</tspan> sender → User</text>
+  <text x="1372" y="521" class="field"><tspan class="fk">FK</tspan> recipient → User</text><text x="1372" y="545" class="field">text, isRead, timestamps</text>
+
+  <rect x="1355" y="625" width="365" height="195" rx="10" class="box"/><path d="M1355 665H1720" class="rule"/>
+  <rect x="1355" y="625" width="365" height="40" rx="10" class="band"/><text x="1372" y="652" class="label">Notification</text>
+  <text x="1372" y="693" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> recipient → User</text><text x="1372" y="717" class="field"><tspan class="fk">FK?</tspan> actor → User</text>
+  <text x="1372" y="741" class="field">category, title, message, page</text><text x="1372" y="765" class="field">targetId (string), readAt</text>
+
+  <!-- Camps -->
+  <rect x="1785" y="210" width="350" height="170" rx="10" class="box"/><path d="M1785 250H2135" class="rule"/>
+  <rect x="1785" y="210" width="350" height="40" rx="10" class="band"/><text x="1802" y="237" class="label">Camp</text>
+  <text x="1802" y="278" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> ngo → NGO</text><text x="1802" y="302" class="field">title, causeCategory, description</text>
+  <text x="1802" y="326" class="field">startAt, endAt, venue, capacity</text><text x="1802" y="350" class="field">isPublished</text>
+
+  <rect x="1785" y="405" width="350" height="210" rx="10" class="box"/><path d="M1785 445H2135" class="rule"/>
+  <rect x="1785" y="405" width="350" height="40" rx="10" class="band"/><text x="1802" y="432" class="label">CampApplication</text>
+  <text x="1802" y="473" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> camp → Camp</text><text x="1802" y="497" class="field"><tspan class="fk">FK</tspan> student → User</text>
+  <text x="1802" y="521" class="field">statement, status, volunteerHours</text><text x="1802" y="545" class="field">consent, check-in &amp; completion data</text>
+  <text x="1802" y="569" class="field">Unique pair: (camp, student)</text>
+
+  <rect x="1785" y="640" width="350" height="175" rx="10" class="box"/><path d="M1785 680H2135" class="rule"/>
+  <rect x="1785" y="640" width="350" height="40" rx="10" class="band"/><text x="1802" y="667" class="label">CampQuestion</text>
+  <text x="1802" y="708" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> camp → Camp</text><text x="1802" y="732" class="field"><tspan class="fk">FK</tspan> author → User  •  body</text>
+  <text x="1802" y="756" class="field">Embedded: replies[] (author, body)</text>
+
+  <rect x="1785" y="840" width="350" height="175" rx="10" class="box"/><path d="M1785 880H2135" class="rule"/>
+  <rect x="1785" y="840" width="350" height="40" rx="10" class="band"/><text x="1802" y="867" class="label">CampAnnouncement</text>
+  <text x="1802" y="908" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> camp → Camp</text><text x="1802" y="932" class="field"><tspan class="fk">FK</tspan> ngo → NGO  •  sentBy → User</text>
+  <text x="1802" y="956" class="field">subject, body, recipientCount</text>
+
+  <rect x="1785" y="1040" width="350" height="220" rx="10" class="box"/><path d="M1785 1080H2135" class="rule"/>
+  <rect x="1785" y="1040" width="350" height="40" rx="10" class="band"/><text x="1802" y="1067" class="label">CampReport</text>
+  <text x="1802" y="1108" class="field"><tspan class="pk">PK</tspan> _id  •  <tspan class="fk">FK</tspan> camp → Camp (unique)</text><text x="1802" y="1132" class="field"><tspan class="fk">FK</tspan> ngo → NGO  •  submittedBy → User</text>
+  <text x="1802" y="1156" class="field">beneficiaries, volunteers, resources</text><text x="1802" y="1180" class="field">successNotes, photoUrls</text>
+  <text x="1802" y="1204" class="field"><tspan class="fk">FK[]</tspan> attendeeApplicationIds → Application</text>
+
+  <!-- Cardinality and implementation legend -->
+  <rect x="45" y="1380" width="2110" height="225" rx="16" class="box"/>
+  <text x="70" y="1420" class="label">Relationship cardinalities</text>
+  <text x="70" y="1452" class="relation">User 1—N CaseStudy, Comment, ForumPost, MentorshipRequest, Message, Notification, Resource, Event, CampApplication and CampQuestion.</text>
+  <text x="70" y="1480" class="relation">User M—N Group membership, event attendance and Conversation participants; CaseStudy 1—N Comment; CaseStudy M—N User (saved cases / upvotes).</text>
+  <text x="70" y="1508" class="relation">NGO 1—1 User owner; NGO 1—N Camp / CampReport; Camp 1—N Application, Question, Announcement; Camp 1—0..1 Report; Report M—N Applications.</text>
+  <line x1="70" y1="1530" x2="2125" y2="1530" class="rule"/>
+  <text x="70" y="1560" class="muted">MongoDB uses ObjectId references rather than SQL-enforced foreign keys. Forum replies, group posts, NGO campaigns, and camp-question replies are embedded subdocuments.</text>
+  <text x="70" y="1585" class="muted">The diagram shows core attributes only; timestamps, counters, and additional profile/content fields are omitted where they do not change relationships.</text>
+</svg>

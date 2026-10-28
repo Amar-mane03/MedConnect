@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#54718a"/></marker>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#163247}.title{font-size:34px;font-weight:700}.sub{font-size:17px;fill:#587184}.box{fill:#fff;stroke:#cbd9e2;stroke-width:2}.actor{fill:#f2f7fb;stroke:#8ca9bd;stroke-width:2}.external{fill:#f7f5ff;stroke:#a398d2;stroke-width:2}.center{fill:#e8f6f3;stroke:#21877b;stroke-width:3}.head{font-size:21px;font-weight:700}.body{font-size:15px;fill:#38566b}.small{font-size:13px;fill:#587184}.flow{fill:none;stroke:#54718a;stroke-width:2.4;marker-end:url(#arrow)}.flow2{fill:none;stroke:#8476b8;stroke-width:2.2;marker-end:url(#arrow)}.tag{font-size:13px;font-weight:700;fill:#36546a}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#f7fafc"/>
+  <text x="64" y="70" class="title">MedConnect — Context-Level DFD (Level 0)</text>
+  <text x="64" y="101" class="sub">System boundary, external actors, integrations, and principal information flows</text>
+
+  <!-- External actors -->
+  <rect x="65" y="185" width="290" height="160" rx="16" class="actor"/>
+  <text x="92" y="224" class="head">Students &amp; mentees</text>
+  <text x="92" y="257" class="body"><tspan x="92">Profiles, mentor requests, cases,</tspan><tspan x="92" dy="23">posts, messages, RSVPs, resources,</tspan><tspan x="92" dy="23">camp applications &amp; consent</tspan></text>
+
+  <rect x="65" y="420" width="290" height="150" rx="16" class="actor"/>
+  <text x="92" y="460" class="head">Mentors</text>
+  <text x="92" y="493" class="body"><tspan x="92">Credentials, mentorship decisions,</tspan><tspan x="92" dy="23">case studies, messages, events</tspan><tspan x="92" dy="23">&amp; shared resources</tspan></text>
+
+  <rect x="65" y="650" width="290" height="150" rx="16" class="actor"/>
+  <text x="92" y="690" class="head">Administrators</text>
+  <text x="92" y="723" class="body"><tspan x="92">Verification, account-management,</tspan><tspan x="92" dy="23">moderation &amp; report decisions</tspan></text>
+
+  <rect x="1245" y="185" width="290" height="170" rx="16" class="actor"/>
+  <text x="1272" y="224" class="head">NGO representatives</text>
+  <text x="1272" y="257" class="body"><tspan x="1272">NGO verification, camps, volunteer</tspan><tspan x="1272" dy="23">applications, announcements,</tspan><tspan x="1272" dy="23">attendance &amp; impact reports</tspan></text>
+
+  <rect x="1245" y="420" width="290" height="145" rx="16" class="external"/>
+  <text x="1272" y="460" class="head">Google Identity</text>
+  <text x="1272" y="493" class="body"><tspan x="1272">Receives token-verification</tspan><tspan x="1272" dy="23">requests; returns identity claims</tspan></text>
+
+  <rect x="1245" y="645" width="290" height="155" rx="16" class="external"/>
+  <text x="1272" y="685" class="head">Email service</text>
+  <text x="1272" y="718" class="body"><tspan x="1272">Resend or SMTP: receives outbound</tspan><tspan x="1272" dy="23">email requests and returns delivery</tspan><tspan x="1272" dy="23">results</tspan></text>
+
+  <!-- Central process -->
+  <rect x="535" y="325" width="530" height="300" rx="26" class="center"/>
+  <text x="800" y="380" text-anchor="middle" class="small">CENTRAL PROCESS — P0</text>
+  <text x="800" y="430" text-anchor="middle" style="font:700 38px Arial,Helvetica,sans-serif;fill:#125f58">MedConnect</text>
+  <text x="800" y="472" text-anchor="middle" class="body">Healthcare mentorship &amp; community platform</text>
+  <line x1="600" y1="495" x2="1000" y2="495" stroke="#b7d9d3" stroke-width="2"/>
+  <text x="800" y="529" text-anchor="middle" class="body">Identity • mentorship • clinical cases • community</text>
+  <text x="800" y="556" text-anchor="middle" class="body">Messaging • events • resources • NGO volunteer camps</text>
+  <text x="800" y="591" text-anchor="middle" class="small">Role-based APIs, persistence &amp; real-time notifications</text>
+
+  <!-- Data stores shown as supporting infrastructure -->
+  <path d="M800 625V737" class="flow"/>
+  <text x="815" y="679" class="tag">read / write</text>
+  <rect x="535" y="740" width="530" height="105" rx="14" class="box"/>
+  <text x="800" y="779" text-anchor="middle" class="head">MongoDB &amp; file storage</text>
+  <text x="800" y="811" text-anchor="middle" class="body">Application records, uploads, credentials &amp; consent documents</text>
+
+  <!-- Actor flows -->
+  <path d="M355 238C425 238 448 363 535 390" class="flow"/>
+  <text x="400" y="276" class="tag">requests / submissions</text>
+  <path d="M535 485C450 493 425 315 355 315" class="flow"/>
+  <text x="378" y="368" class="tag">results / content</text>
+
+  <path d="M355 472C430 472 458 472 535 472" class="flow"/>
+  <text x="394" y="455" class="tag">profile / decisions</text>
+  <path d="M535 545C455 545 430 545 355 545" class="flow"/>
+  <text x="405" y="569" class="tag">requests / updates</text>
+
+  <path d="M355 708C445 708 465 600 560 580" class="flow"/>
+  <text x="389" y="674" class="tag">review actions</text>
+  <path d="M535 600C455 625 430 755 355 755" class="flow"/>
+  <text x="395" y="740" class="tag">queues / outcomes</text>
+
+  <path d="M1065 390C1145 360 1160 245 1245 245" class="flow"/>
+  <text x="1082" y="333" class="tag">camp participation</text>
+  <path d="M1245 315C1170 315 1140 435 1065 445" class="flow"/>
+  <text x="1090" y="408" class="tag">camp updates</text>
+
+  <path d="M1065 480C1140 480 1165 480 1245 480" class="flow2"/>
+  <text x="1080" y="462" class="tag">verify token</text>
+  <path d="M1245 535C1170 535 1140 520 1065 520" class="flow2"/>
+  <text x="1080" y="558" class="tag">identity claims</text>
+
+  <path d="M1065 570C1140 590 1160 700 1245 700" class="flow2"/>
+  <text x="1080" y="622" class="tag">email request</text>
+  <path d="M1245 765C1170 765 1140 620 1065 600" class="flow2"/>
+  <text x="1080" y="737" class="tag">delivery status</text>
+
+  <text x="65" y="915" class="small">Technical note: MongoDB and file storage are depicted as supporting data stores, not external actors. Real-time messaging and</text>
+  <text x="65" y="938" class="small">notifications are delivered through the MedConnect application’s Socket.IO channel; no external video-conferencing system is modeled.</text>
+</svg>

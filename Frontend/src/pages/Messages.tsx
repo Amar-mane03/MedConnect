@@ -19,7 +19,7 @@ interface Participant {
 
 interface ConversationItem {
   _id: string;
-  participants: Participant[];
+  participants?: Participant[];
   lastMessage?: {
     content: string;
     createdAt: string;
@@ -36,6 +36,34 @@ interface MessageItem {
   from?: 'me' | 'them';
 }
 
+interface ApiMessage {
+  id?: string;
+  _id?: string;
+  conversationId?: string | { _id: string };
+  sender?: Participant | string;
+  senderId?: string;
+  content?: string;
+  text?: string;
+  createdAt?: string;
+  from?: 'me' | 'them';
+}
+
+function normalizeMessage(message: ApiMessage): MessageItem {
+  const conversationId = typeof message.conversationId === 'string'
+    ? message.conversationId
+    : message.conversationId?._id || '';
+  const createdAt = message.createdAt || '';
+
+  return {
+    _id: message._id || message.id || `${conversationId}-${createdAt}`,
+    conversationId,
+    sender: message.sender || message.senderId || '',
+    content: message.content ?? message.text ?? '',
+    createdAt,
+    from: message.from,
+  };
+}
+
 export default function MessagesPage({ navigate }: Props) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
@@ -50,6 +78,8 @@ export default function MessagesPage({ navigate }: Props) {
 
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const activeConvIdRef = useRef(activeConvId);
+  activeConvIdRef.current = activeConvId;
 
   const myId = user?._id || user?.id;
 
@@ -76,14 +106,23 @@ export default function MessagesPage({ navigate }: Props) {
       if (myId) {
         socket.emit('join_user', myId);
       }
+      if (activeConvIdRef.current) {
+        socket.emit('join_conversation', activeConvIdRef.current);
+      }
     });
 
     socket.on('disconnect', () => {
       setIsConnected(false);
     });
 
-    socket.on('chat_message', (msg: MessageItem) => {
-      if (msg.conversationId === activeConvId) {
+    socket.on('connect_error', (error) => {
+      setIsConnected(false);
+      console.error('Socket.io connection failed:', error.message);
+    });
+
+    socket.on('chat_message', (payload: ApiMessage) => {
+      const msg = normalizeMessage(payload);
+      if (msg.conversationId === activeConvIdRef.current) {
         setMessages(prev => {
           if (prev.some(m => m._id === msg._id)) return prev;
           return [...prev, msg];
@@ -107,7 +146,7 @@ export default function MessagesPage({ navigate }: Props) {
     return () => {
       socket.disconnect();
     };
-  }, [activeConvId, myId]);
+  }, [myId]);
 
   // Fetch conversations and mentor contacts
   const fetchConversations = async () => {
@@ -120,9 +159,19 @@ export default function MessagesPage({ navigate }: Props) {
 
       if (convRes.data?.conversations) {
         const formatted = convRes.data.conversations.map((c: any) => {
-          const other = c.participants.find((p: any) => (p._id || p.id) !== myId) || c.participants[0];
+          const participants = Array.isArray(c.participants) ? c.participants : [];
+          const other = c.otherUser || participants.find((p: any) => (p._id || p.id) !== myId) || participants[0];
+          const lastMessageContent = typeof c.lastMessage === 'string'
+            ? c.lastMessage
+            : c.lastMessage?.content || c.lastMsg || '';
+
           return {
             ...c,
+            _id: c._id || c.id,
+            lastMessage: {
+              content: lastMessageContent,
+              createdAt: c.lastMessageAt || c.lastMessage?.createdAt || '',
+            },
             otherUser: other,
           };
         });
@@ -158,7 +207,7 @@ export default function MessagesPage({ navigate }: Props) {
       try {
         const res = await API.get(`/messages/conversations/${activeConvId}/messages`);
         if (res.data?.messages) {
-          setMessages(res.data.messages);
+          setMessages(res.data.messages.map(normalizeMessage));
         }
       } catch (err) {
         console.error('Failed to load messages for conversation:', err);
@@ -197,10 +246,11 @@ export default function MessagesPage({ navigate }: Props) {
 
     try {
       const res = await API.post(`/messages/conversations/${activeConvId}/messages`, {
-        content: messageText,
+        text: messageText,
       });
       if (res.data?.message) {
-        setMessages(prev => [...prev, res.data.message]);
+        const message = normalizeMessage(res.data.message);
+        setMessages(prev => prev.some(item => item._id === message._id) ? prev : [...prev, message]);
         setConversations(prev =>
           prev.map(c =>
             c._id === activeConvId

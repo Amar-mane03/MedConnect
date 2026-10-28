@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { Conversation, Message } = require("../models/Message");
 const User = require("../models/user");
 const { requireAuth } = require("../middlewares/authMiddleware");
@@ -58,6 +59,40 @@ router.get("/conversations", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Fetch conversations error:", error);
     res.status(500).json({ message: "Unable to load conversations." });
+  }
+});
+
+router.post("/conversations", requireAuth, async (req, res) => {
+  const { recipientId } = req.body || {};
+  if (!mongoose.Types.ObjectId.isValid(recipientId)) {
+    return res.status(400).json({ message: "A valid recipient is required." });
+  }
+  if (recipientId === req.user._id.toString()) {
+    return res.status(400).json({ message: "You cannot start a conversation with yourself." });
+  }
+
+  try {
+    const recipient = await User.findById(recipientId).select("_id");
+    if (!recipient) {
+      return res.status(404).json({ message: "Recipient not found." });
+    }
+
+    let conversation = await Conversation.findOne({
+      participants: { $all: [req.user._id, recipient._id], $size: 2 },
+    });
+    const created = !conversation;
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [req.user._id, recipient._id],
+      });
+    }
+
+    await conversation.populate("participants", "name specialty role mentorVerificationStatus hospital");
+    res.status(created ? 201 : 200).json({ conversation });
+  } catch (error) {
+    console.error("Create conversation error:", error);
+    res.status(500).json({ message: "Unable to start conversation." });
   }
 });
 

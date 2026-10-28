@@ -86,8 +86,8 @@ router.get("/:id", requireAuth, async (req, res) => {
 // POST request mentorship from mentor
 router.post("/:id/request", requireAuth, async (req, res) => {
   try {
-    if (req.user.role !== "mentee") {
-      return res.status(403).json({ message: "Only mentee accounts can request mentorship." });
+    if (!["mentee", "student"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Only student and mentee accounts can request mentorship." });
     }
 
     const mentorId = req.params.id;

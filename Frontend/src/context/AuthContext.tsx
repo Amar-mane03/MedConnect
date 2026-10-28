@@ -5,19 +5,24 @@ export interface UserProfile {
   id?: string;
   name: string;
   email: string;
-  role: 'mentee' | 'mentor' | 'admin';
+  role: 'mentee' | 'mentor' | 'student' | 'ngo' | 'admin';
   specialty?: string;
   subspecialty?: string;
   careerStage?: string;
   hospital?: string;
   institution?: string;
+  location?: string;
+  bio?: string;
+  degrees?: string;
+  goals?: string;
+  communicationPreference?: string;
   mentorVerificationStatus?: 'not_required' | 'pending' | 'verified' | 'rejected';
 }
 
 interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
-  role: 'mentee' | 'mentor' | 'admin' | null;
+  role: 'mentee' | 'mentor' | 'student' | 'ngo' | 'admin' | null;
   isAuthenticated: boolean;
   login: (user: UserProfile, token: string) => void;
   logout: () => void;
@@ -53,6 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('medconnect_user');
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setToken(null);
+    };
+    window.addEventListener('medconnect:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('medconnect:unauthorized', handleUnauthorized);
+  }, []);
 
   const login = (newUser: UserProfile, newToken: string) => {
     setUser(newUser);

@@ -25,9 +25,7 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("medconnect_token");
-      localStorage.removeItem("medconnect_user");
-      if (window.location.pathname !== "/") window.history.replaceState({}, "", "/");
+      window.dispatchEvent(new Event("medconnect:unauthorized"));
     }
     return Promise.reject(error);
   },

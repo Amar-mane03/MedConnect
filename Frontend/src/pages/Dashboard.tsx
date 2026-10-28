@@ -48,6 +48,7 @@ const specialtyColors: Record<string, string> = {
 
 export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }: DashboardProps) {
   const { user, role } = useAuth();
+  const canPublishCases = role === 'mentor' && user?.mentorVerificationStatus === 'verified';
   const [activeFilter, setActiveFilter] = useState('All');
   const [caseSearch, setCaseSearch] = useState('');
   const [topicSearch, setTopicSearch] = useState('');
@@ -350,7 +351,7 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
             <div className="relative max-w-3xl">
               <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#A9C1B5]">
                 <span className="h-2 w-2 rounded-full bg-[#3D7A68]" />
-                Verified consultant hub
+                {canPublishCases ? 'Verified consultant hub' : 'Mentor verification'}
               </div>
 
               <h1 className="text-3xl font-semibold leading-tight text-white sm:text-4xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
@@ -358,7 +359,9 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
               </h1>
 
               <p className="mt-3 max-w-xl text-sm leading-6 text-[#D6E0E5]">
-                Publish case teaching, guide trainees, and share clinical insight with the next generation of doctors.
+                {canPublishCases
+                  ? 'Publish case teaching, guide trainees, and share clinical insight with the next generation of doctors.'
+                  : 'Explore the learning community while your professional credentials are verified. Case publishing becomes available after approval.'}
               </p>
 
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -381,9 +384,11 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <button onClick={() => setPublishModalOpen(true)} className="rounded-lg bg-[#0B192C] px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#192B40] sm:text-sm">
-                  Publish case
-                </button>
+                {canPublishCases && (
+                  <button onClick={() => setPublishModalOpen(true)} className="rounded-lg bg-[#0B192C] px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#192B40] sm:text-sm">
+                    Publish case
+                  </button>
+                )}
                 <button onClick={() => navigate('events')} className="rounded-lg bg-white px-5 py-2.5 text-xs font-bold text-[#0B192C] transition-colors hover:bg-[#F0F4F2] sm:text-sm">
                   Host event
                 </button>
@@ -395,7 +400,7 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
             <div className="relative max-w-3xl">
               <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#A9C1B5]">
                 <span className="h-2 w-2 rounded-full bg-[#A9C1B5]" />
-                Junior doctor learning hub
+                {role === 'student' ? 'Medical student learning hub' : 'Clinical learning hub'}
               </div>
 
               <h1 className="text-3xl font-semibold leading-tight text-white sm:text-4xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
@@ -451,15 +456,25 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#C8D6D0] text-[10px] font-bold text-[#35564E]">MD</span>
                   <div>
                     <div className="text-xs sm:text-sm font-bold text-[#0B192C]">Clinician Publishing & Peer Review Portal</div>
-                    <div className="text-[11px] sm:text-xs text-[#3D7A68]">You have verified educator credentials to author complex case studies and answer trainee questions.</div>
+                    <div className="text-[11px] sm:text-xs text-[#3D7A68]">
+                      {canPublishCases
+                        ? 'Your educator credentials are verified. You can author case studies and answer trainee questions.'
+                        : user?.mentorVerificationStatus === 'pending'
+                          ? 'Your credentials are awaiting review. Case publishing will be available after approval.'
+                          : user?.mentorVerificationStatus === 'rejected'
+                            ? 'Your credentials were not approved. Contact support for next steps before publishing cases.'
+                            : 'Your mentor account needs verification before you can publish cases.'}
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setPublishModalOpen(true)}
-                  className="shrink-0 rounded-full bg-[#0B192C] hover:bg-[#192B40] text-white px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  + New Case
-                </button>
+                {canPublishCases && (
+                  <button
+                    onClick={() => setPublishModalOpen(true)}
+                    className="shrink-0 rounded-full bg-[#0B192C] hover:bg-[#192B40] text-white px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    + New Case
+                  </button>
+                )}
               </div>
             ) : role === 'admin' ? (
               <div className="p-4 rounded-lg bg-[#E8F0EC] border border-[#52796F]/30 flex items-center justify-between gap-3 shadow-2xs">
@@ -558,7 +573,7 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
               </div>
 
               {/* Mentor-only Publishing Badge / Button */}
-              {role === 'mentor' && (
+              {canPublishCases && (
                 <button
                   onClick={() => setPublishModalOpen(true)}
                   className="rounded-full bg-[#0B192C] hover:bg-[#192B40] text-white px-4 py-1.5 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
@@ -578,9 +593,9 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
               <div className="py-12 text-center text-sm text-[#74817D] bg-[#FFFFFF] rounded-lg border border-[#E1E7E5] p-6">
                 <p className="font-semibold text-[#0B192C] text-base mb-1">{showSavedOnly ? 'No saved cases yet.' : 'No cases found in this category.'}</p>
                 <p className="text-xs text-[#52616C]">
-                  {role === 'mentor' ? 'Be the first mentor to publish a case in this specialty!' : 'Check other specialty filters or check back soon.'}
+                  {canPublishCases ? 'Be the first mentor to publish a case in this specialty!' : role === 'mentor' ? 'Check other specialty filters while your account verification is reviewed.' : 'Check other specialty filters or check back soon.'}
                 </p>
-                {role === 'mentor' && (
+                {canPublishCases && (
                   <button
                     onClick={() => setPublishModalOpen(true)}
                     className="mt-4 px-4 py-2 bg-[#0B192C] text-white text-xs font-bold rounded-full hover:bg-[#192B40]"
@@ -953,7 +968,7 @@ export default function DashboardPage({ navigate, onSelectCase, onSelectMentor }
       </div>
 
       {/* Case Publishing Modal - Exclusively for Mentors */}
-      {publishModalOpen && (
+      {publishModalOpen && canPublishCases && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B192C]/40 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-[#FFFFFF] rounded-lg border border-[#E1E7E5] shadow-2xl max-w-2xl w-full p-6 sm:p-8 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-[#E1E7E5] mb-6">

@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["mentor", "mentee", "admin"],
+      enum: ["mentor", "mentee", "student", "ngo", "admin"],
       default: "mentee",
     },
     careerStage: {
@@ -73,6 +73,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
     rating: {
       type: Number,
       default: 0,
@@ -105,6 +109,7 @@ const userSchema = new mongoose.Schema(
       mentorship: { type: Boolean, default: true },
       messages: { type: Boolean, default: true },
       caseComments: { type: Boolean, default: true },
+      community: { type: Boolean, default: true },
     },
     publications: [
       {
@@ -123,7 +128,7 @@ const userSchema = new mongoose.Schema(
     ],
     emailVerified: {
       type: Boolean,
-      default: false,
+      default: true,
     },
     emailVerificationToken: {
       type: String,

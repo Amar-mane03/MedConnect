@@ -1,11 +1,16 @@
 // MedConnect Authentication & Clinical Onboarding
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import API from '../api';
 import { useAuth } from '../context/AuthContext';
+import type { Page } from '../App';
+
+const AUTH_REQUEST_TIMEOUT_MS = 60_000;
 
 interface LoginPageProps {
   onLogin: (role?: string) => void;
   onBack?: () => void;
+  navigate: (page: Page) => void;
   initialMode?: 'login' | 'register';
 }
 
@@ -22,24 +27,28 @@ declare global {
   }
 }
 
-export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: LoginPageProps) {
+export default function LoginPage({ onLogin, onBack, navigate, initialMode = 'login' }: LoginPageProps) {
   const { login } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [authFlow, setAuthFlow] = useState<'login' | 'register' | 'forgot' | 'reset' | 'verify' | 'onboarding'>(() =>
     window.location.pathname.startsWith('/reset-password/') ? 'reset' : initialMode
   );
-  const [role, setRole] = useState<'mentor' | 'mentee'>('mentee');
+  const [role, setRole] = useState<'mentor' | 'mentee' | 'student' | 'ngo' | 'admin'>('student');
+  const [adminSecret, setAdminSecret] = useState('');
+  const [developmentVerificationUrl, setDevelopmentVerificationUrl] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [careerStage, setCareerStage] = useState('');
   const [goals, setGoals] = useState('');
   const [communicationPreference, setCommunicationPreference] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [verificationFile, setVerificationFile] = useState<File | null>(null);
+  const [pendingSignupToken, setPendingSignupToken] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [status, setStatus] = useState<{
     type: 'success' | 'error';
@@ -52,6 +61,12 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
     symbol: /[^A-Za-z0-9]/.test(password),
   };
   const passwordScore = Object.values(passwordChecks).filter(Boolean).length;
+  const signupRoles: { value: typeof role; label: string; badge: string; description: string }[] = [
+    { value: 'student', label: 'Student / Volunteer', badge: 'ST', description: 'Join camps and track service' },
+    { value: 'ngo', label: 'NGO Representative', badge: 'NGO', description: 'Manage camps and impact' },
+    { value: 'mentor', label: 'Mentor', badge: 'MD', description: 'Attending / Consultant' },
+    ...(import.meta.env.DEV ? [{ value: 'admin' as const, label: 'Administrator', badge: 'ADM', description: 'Development only' }] : []),
+  ];
 
   useEffect(() => {
     if (authFlow !== 'register') setTermsAccepted(false);
@@ -104,26 +119,36 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
     }
 
     if (mode === 'register' && !termsAccepted) {
-      setStatus({ type: 'error', message: 'Please accept the MedConnect terms to create your account.' });
+      setStatus({ type: 'error', message: 'Please accept the Good Neighbors terms to create your account.' });
+      return;
+    }
+
+    if (mode === 'register' && role === 'admin' && !adminSecret.trim()) {
+      setStatus({ type: 'error', message: 'Enter the development ADMIN_SECRET from Backend/.env to create an administrator account.' });
       return;
     }
 
     try {
       if (mode === 'register') {
-        const response = await API.post('/auth/signup', {
-          name,
-          email,
-          password,
-          specialty,
-          role,
-          careerStage,
-          goals,
-          communicationPreference,
-        });
+        const response = await API.post(
+          '/auth/signup',
+          {
+            name,
+            email,
+            password,
+            specialty,
+            role,
+            ...(role === 'admin' ? { adminSecret } : {}),
+            dateOfBirth: role === 'student' ? dateOfBirth : undefined,
+            careerStage,
+            goals,
+            communicationPreference,
+          },
+          { timeout: AUTH_REQUEST_TIMEOUT_MS },
+        );
 
-        if (response.data.token && response.data.user) {
-          login(response.data.user, response.data.token);
-        }
+        setPendingSignupToken(response.data.token || null);
+        setDevelopmentVerificationUrl(response.data.verificationUrl || '');
 
         setStatus({
           type: 'success',
@@ -132,10 +157,14 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
 
         setAuthFlow('verify');
       } else {
-        const response = await API.post('/auth/login', {
-          email,
-          password,
-        });
+        const response = await API.post(
+          '/auth/login',
+          {
+            email,
+            password,
+          },
+          { timeout: AUTH_REQUEST_TIMEOUT_MS },
+        );
 
         if (response.data.token && response.data.user) {
           login(response.data.user, response.data.token);
@@ -148,14 +177,23 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
 
         onLogin(response.data.user?.role);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
+
+      const isAxiosError = axios.isAxiosError(error);
+      const responseMessage = isAxiosError ? error.response?.data?.message : undefined;
+      const isTimeout = isAxiosError && ['ECONNABORTED', 'ETIMEDOUT'].includes(error.code ?? '');
+      const isConnectionError = isAxiosError && !error.response;
 
       setStatus({
         type: 'error',
-        message:
-          error.response?.data?.message ||
-          'Unable to complete your request. Please try again.',
+        message: responseMessage || (
+          isTimeout
+            ? 'MedConnect is taking longer than expected to respond. Your account may still have been created—wait a moment, then try signing in before creating it again.'
+            : isConnectionError
+            ? 'We could not connect to MedConnect. Check your connection and try again.'
+            : 'Unable to complete your request. Please try again.'
+        ),
       });
     }
   };
@@ -166,29 +204,56 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
       return;
     }
 
+    if (!pendingSignupToken) {
+      setStatus({ type: 'error', message: 'Please create your account before personalizing your profile.' });
+      return;
+    }
+
     try {
       await API.post('/auth/onboarding', {
-        email,
         careerStage,
         goals,
         communicationPreference,
+      }, {
+        headers: { Authorization: `Bearer ${pendingSignupToken}` },
       });
+      setStatus({ type: 'success', message: 'Profile preferences saved. Verify your email to finish creating your account.' });
+      setAuthFlow('verify');
     } catch (error) {
       console.error(error);
+      const isAxiosError = axios.isAxiosError(error);
+      setStatus({
+        type: 'error',
+        message: isAxiosError
+          ? error.response?.data?.message || 'Unable to save your profile preferences. Please try again.'
+          : 'Unable to save your profile preferences. Please try again.',
+      });
     }
-
-    onLogin();
   };
 
   const handleResendVerification = async () => {
     try {
-      const response = await API.post('/auth/resend-verification', { email });
+      const response = await API.post(
+        '/auth/resend-verification',
+        { email },
+        { timeout: AUTH_REQUEST_TIMEOUT_MS },
+      );
       setStatus({ type: 'success', message: response.data.message });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
+      const isAxiosError = axios.isAxiosError(error);
+      const responseMessage = isAxiosError ? error.response?.data?.message : undefined;
+      const isTimeout = isAxiosError && ['ECONNABORTED', 'ETIMEDOUT'].includes(error.code ?? '');
+      const isConnectionError = isAxiosError && !error.response;
+      const fallbackMessage = isTimeout
+        ? 'The email service is taking longer than expected. Check your inbox before requesting another link.'
+        : isConnectionError
+        ? 'We could not connect to MedConnect. Check your connection and try again.'
+        : 'We could not resend the verification email right now.';
+
       setStatus({
         type: 'error',
-        message: (error as any).response?.data?.message || 'We could not resend the verification email right now.',
+        message: responseMessage || fallbackMessage,
       });
     }
   };
@@ -202,7 +267,9 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
     formData.append('credential', file);
 
     try {
-      const response = await API.post('/auth/mentor-credentials', formData);
+      const response = await API.post('/auth/mentor-credentials', formData, {
+        headers: pendingSignupToken ? { Authorization: `Bearer ${pendingSignupToken}` } : undefined,
+      });
       setStatus({ type: 'success', message: response.data.message });
     } catch (error: any) {
       setStatus({ type: 'error', message: error.response?.data?.message || 'We could not upload this file.' });
@@ -210,6 +277,11 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
   };
 
   const handleGoogleSignIn = () => {
+    if (mode === 'register' && role === 'admin') {
+      setStatus({ type: 'error', message: 'Create development administrator accounts with your password and ADMIN_SECRET, not Google sign-up.' });
+      return;
+    }
+
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
     if (!clientId || !window.google) {
@@ -283,11 +355,11 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
 
     try {
       await API.post(`/auth/reset-password/${token}`, { password });
-      window.history.replaceState({}, '', '/');
       setPassword('');
       setConfirmPassword('');
       setAuthFlow('login');
       setStatus({ type: 'success', message: 'Your password has been updated. You can sign in now.' });
+      navigate('login');
     } catch (error: any) {
       console.error(error);
       setStatus({
@@ -298,8 +370,27 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F9F8] px-4 py-6 sm:px-8 sm:py-10 flex items-center justify-center">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl overflow-hidden rounded-lg border border-[#E1E7E5] bg-[#FFFFFF] shadow-[0_24px_60px_rgba(11,25,44,0.08)] lg:grid-cols-[0.9fr_1.1fr]">
+    <div className="min-h-screen bg-[#F7F9F8] px-4 py-4 sm:px-8 sm:py-6">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 border-b border-[#DCE5E1] pb-4">
+        <button type="button" onClick={() => onBack ? onBack() : navigate('home')} className="flex shrink-0 items-center gap-2.5 font-bold text-[#0B192C]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0B192C] text-sm font-extrabold text-white">G</span>
+          <span className="text-lg" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Good Neighbors</span>
+        </button>
+        <nav aria-label="Main navigation" className="order-3 flex w-full gap-2 overflow-x-auto pb-1 text-sm font-semibold sm:order-2 sm:w-auto sm:pb-0">
+          <button type="button" onClick={() => navigate('community')} className="shrink-0 rounded-full px-3 py-2 text-[#35564E] hover:bg-white">Community</button>
+          <button type="button" onClick={() => navigate('ngos')} className="shrink-0 rounded-full px-3 py-2 text-[#35564E] hover:bg-white">Organizations</button>
+          <button type="button" onClick={() => navigate('camps')} className="shrink-0 rounded-full px-3 py-2 text-[#35564E] hover:bg-white">Volunteer camps</button>
+        </nav>
+        <button
+          type="button"
+          onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setAuthFlow(mode === 'login' ? 'register' : 'login'); setStatus(null); }}
+          className="order-2 shrink-0 rounded-lg bg-[#0B192C] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#192B40] sm:order-3"
+        >
+          {mode === 'login' ? 'Create account' : 'Sign in'}
+        </button>
+      </header>
+      <div className="flex min-h-[calc(100vh-6.5rem)] items-center justify-center py-6 sm:py-8">
+      <div className="mx-auto grid min-h-[min(760px,calc(100vh-9rem))] w-full max-w-6xl overflow-hidden rounded-lg border border-[#E1E7E5] bg-[#FFFFFF] shadow-[0_24px_60px_rgba(11,25,44,0.08)] lg:grid-cols-[0.9fr_1.1fr]">
         
         {/* Brand panel */}
         <aside className="relative hidden overflow-hidden bg-[#0B192C] px-10 py-12 text-white lg:flex lg:flex-col justify-between">
@@ -310,30 +401,30 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
               <span className="text-lg font-extrabold text-white">M</span>
             </div>
             <span className="text-xl font-bold tracking-tight text-white" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-              MedConnect
+              Good Neighbors
             </span>
           </div>
 
           <div className="relative my-auto max-w-sm py-10">
             <p className="mb-4 text-xs font-bold uppercase text-[#A9C1B5]">
-              A community for clinicians and trainees
+              A community for service and learning
             </p>
             <h2 className="text-4xl font-semibold leading-[1.08] text-white" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-              Learn with clinicians who understand your next step.
+              Learn by doing, alongside people who care about your community.
             </h2>
             <p className="mt-5 text-sm leading-6 text-[#D6E0E5]">
-              Find mentorship and learn through de-identified cases, alongside peers who know the work.
+              Discover local organizations, take part in field camps, and keep track of the impact you make.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-5 border-t border-white/15 pt-5">
             <div>
-              <p className="text-xs font-bold text-white">Credential-reviewed mentors</p>
-              <p className="mt-1 text-xs leading-5 text-[#D6E0E5]">Mentor credentials are reviewed by MedConnect.</p>
+              <p className="text-xs font-bold text-white">Verified NGO partners</p>
+              <p className="mt-1 text-xs leading-5 text-[#D6E0E5]">Organization profiles are reviewed before listing.</p>
             </div>
             <div>
-              <p className="text-xs font-bold text-white">De-identified case learning</p>
-              <p className="mt-1 text-xs leading-5 text-[#D6E0E5]">Keep patient-identifying details out of discussions.</p>
+              <p className="text-xs font-bold text-white">Real-world field experience</p>
+              <p className="mt-1 text-xs leading-5 text-[#D6E0E5]">Track participation and service hours as you contribute.</p>
             </div>
           </div>
         </aside>
@@ -341,31 +432,6 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
         {/* Right Side: Form Area */}
         <div className="w-full p-6 sm:p-10 lg:p-12 flex flex-col justify-between bg-[#FFFFFF]">
           <div>
-            {/* Mobile Header */}
-            <div className="mb-6 flex items-center justify-between lg:hidden">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0B192C]">
-                  <span className="text-sm font-extrabold text-white">M</span>
-                </div>
-                <span className="text-lg font-bold text-[#0B192C]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-                  MedConnect
-                </span>
-              </div>
-              {onBack && (
-                <button type="button" onClick={onBack} className="text-xs font-semibold text-[#52616C] hover:text-[#52796F]">
-                  ← Home
-                </button>
-              )}
-            </div>
-
-            {onBack && (
-              <div className="hidden lg:flex justify-end mb-4">
-                <button type="button" onClick={onBack} className="text-xs font-semibold text-[#52616C] hover:text-[#52796F] transition-colors flex items-center gap-1">
-                  ← Back to home
-                </button>
-              </div>
-            )}
-
             {/* Auth Mode Tabs (Switch easily between Login and Register) */}
             <div className="mb-6 flex rounded-full bg-[#F0F4F2] p-1 border border-[#E1E7E5]/70">
               <button
@@ -403,16 +469,20 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                   : authFlow === 'onboarding'
                   ? 'Personalize your journey'
                   : mode === 'login'
-                  ? 'Welcome back to MedConnect'
-                  : 'Join the clinical community'}
+                  ? 'Welcome back to Good Neighbors'
+                  : role === 'ngo'
+                    ? 'Join as an NGO representative'
+                    : 'Join the volunteer community'}
               </h1>
 
               <p className="mt-2 text-sm leading-relaxed text-[#52616C]">
                 {authFlow === 'forgot'
                   ? 'Enter your email address and we’ll send a link to recover your account.'
                   : mode === 'login'
-                  ? 'Connect with peers, review authentic cases, and continue learning.'
-                  : 'Start learning with clinicians who have walked your path.'}
+                  ? 'Find community camps, support a cause, and build practical experience.'
+                  : role === 'ngo'
+                    ? 'Coordinate community camps, review volunteer applications, and share your organization’s impact.'
+                    : 'Discover local organizations, apply for field camps, and track your volunteer experience.'}
               </p>
             </div>
 
@@ -433,17 +503,6 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
               </div>
             )}
 
-            {mode === 'login' && email.trim() && status?.type === 'error' &&
-              (status.message.toLowerCase().includes('verify your email') || status.message.toLowerCase().includes('verification email')) && (
-                <button
-                  type="button"
-                  onClick={handleResendVerification}
-                  className="mb-6 text-sm font-semibold text-[#52796F] hover:underline"
-                >
-                  Resend verification email
-                </button>
-              )}
-
             {/* Verification Flow */}
             {authFlow === 'verify' ? (
               <div className="space-y-5">
@@ -461,12 +520,21 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
 
                 {role === 'mentor' && (
                   <div className="rounded-lg border border-[#E1E7E5] bg-[#F0F4F2] p-4 text-xs text-[#52616C]">
-                    <strong className="block text-[#0B192C] text-sm mb-1 font-semibold">Doctor Verification</strong>
-                    Mentor profiles receive a verification badge once credentials (GMC/Medical Licence) are verified.
+                    <strong className="block text-[#0B192C] text-sm mb-1 font-semibold">Mentor Verification</strong>
+                    Mentor profiles receive a verification badge once professional credentials are reviewed.
                     <label className="mt-3 block cursor-pointer font-bold text-[#52796F] hover:underline">
                       <span>{verificationFile ? verificationFile.name : '+ Attach credentials or licence copy (optional)'}</span>
                       <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="sr-only" onChange={(e) => handleCredentialUpload(e.target.files?.[0] || null)} />
                     </label>
+                  </div>
+                )}
+
+                {developmentVerificationUrl && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p>Email delivery is not configured. For local development only, verify this account using the link below:</p>
+                    <a className="mt-2 inline-block break-all font-semibold underline" href={developmentVerificationUrl}>
+                      Verify development account
+                    </a>
                   </div>
                 )}
 
@@ -491,12 +559,12 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
               <div className="space-y-4">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#52796F]">Step 1 of 1</span>
-                  <h2 className="mt-1 text-xl font-bold text-[#0B192C]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Make MedConnect yours</h2>
-                  <p className="mt-1 text-xs text-[#52616C]">Tell us what a useful connection looks like for you.</p>
+                  <h2 className="mt-1 text-xl font-bold text-[#0B192C]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Make Good Neighbors yours</h2>
+                  <p className="mt-1 text-xs text-[#52616C]">{role === 'ngo' ? 'Tell volunteers what your organization hopes to accomplish.' : 'Tell us what you hope to learn and contribute.'}</p>
                 </div>
 
                 <div>
-                  <label htmlFor="career-stage" className="mb-1 block text-xs font-bold text-[#0B192C]">Career Stage</label>
+                  <label htmlFor="career-stage" className="mb-1 block text-xs font-bold text-[#0B192C]">{role === 'ngo' ? 'Your organization role' : 'Your current stage'}</label>
                   <select
                     id="career-stage"
                     value={careerStage}
@@ -504,10 +572,17 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                     className="w-full rounded-lg border border-[#E1E7E5] bg-white px-4 py-2.5 text-sm text-[#0B192C] focus:border-[#52796F] focus:outline-none focus:ring-2 focus:ring-[#52796F]/15"
                   >
                     <option value="">Choose your stage</option>
-                    <option>Medical student</option>
-                    <option>Resident / registrar</option>
-                    <option>Fellow</option>
-                    <option>Attending / consultant</option>
+                    {role === 'ngo' ? <>
+                      <option>Organization coordinator</option>
+                      <option>Volunteer coordinator</option>
+                      <option>Community program lead</option>
+                      <option>Other NGO representative</option>
+                    </> : <>
+                      <option>Student volunteer</option>
+                      <option>Community volunteer</option>
+                      <option>Early-career professional</option>
+                      <option>Experienced professional</option>
+                    </>}
                   </select>
                 </div>
 
@@ -520,10 +595,17 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                     className="w-full rounded-lg border border-[#E1E7E5] bg-white px-4 py-2.5 text-sm text-[#0B192C] focus:border-[#52796F] focus:outline-none focus:ring-2 focus:ring-[#52796F]/15"
                   >
                     <option value="">Choose a primary goal</option>
-                    <option>Find a clinical mentor</option>
-                    <option>Share knowledge with peers</option>
-                    <option>Explore specialties</option>
-                    <option>Build my professional network</option>
+                    {role === 'ngo' ? <>
+                      <option>Recruit and coordinate volunteers</option>
+                      <option>Publish community camps</option>
+                      <option>Share program impact</option>
+                      <option>Build local partnerships</option>
+                    </> : <>
+                      <option>Find a volunteer opportunity</option>
+                      <option>Build practical field skills</option>
+                      <option>Support a local cause</option>
+                      <option>Track my volunteer hours</option>
+                    </>}
                   </select>
                 </div>
 
@@ -537,7 +619,7 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                   >
                     <option value="">Choose a style</option>
                     <option>Structured and focused</option>
-                    <option>Casual clinical discussion</option>
+                    <option>Friendly and collaborative</option>
                     <option>Either works for me</option>
                   </select>
                 </div>
@@ -547,7 +629,7 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                   onClick={handleOnboarding}
                   className="mt-2 w-full rounded-full bg-[#0B192C] py-3.5 text-sm font-bold text-white transition-all hover:bg-[#192B40]"
                 >
-                  Enter MedConnect Feed
+                  Continue to Good Neighbors
                 </button>
               </div>
             ) : authFlow === 'forgot' || authFlow === 'reset' ? (
@@ -624,14 +706,31 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                       <input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Dr. Jane Cooper"
+                        placeholder={role === 'ngo' ? 'Your full name' : role === 'student' ? 'Your name' : 'Dr. Jane Cooper'}
                         className="w-full rounded-lg border border-[#E1E7E5] bg-white px-4 py-2.5 text-sm text-[#0B192C] focus:border-[#52796F] focus:outline-none focus:ring-2 focus:ring-[#52796F]/15"
                       />
                     </div>
 
-                    <div>
+                    {role === 'student' && (
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-[#0B192C]">
+                          Date of birth
+                        </label>
+                        <input
+                          type="date"
+                          value={dateOfBirth}
+                          max={new Date().toISOString().slice(0, 10)}
+                          onChange={(event) => setDateOfBirth(event.target.value)}
+                          required
+                          className="w-full rounded-lg border border-[#E1E7E5] bg-white px-4 py-2.5 text-sm text-[#0B192C] focus:border-[#52796F] focus:outline-none focus:ring-2 focus:ring-[#52796F]/15"
+                        />
+                        <p className="mt-1 text-[11px] text-[#74817D]">Required for age-appropriate camp consent.</p>
+                      </div>
+                    )}
+
+                    {role !== 'ngo' && <div>
                       <label className="mb-1 block text-xs font-bold text-[#0B192C]">
-                        Medical Specialty
+                        {role === 'student' ? 'Area of interest' : 'Medical Specialty'}
                       </label>
                       <select
                         value={specialty}
@@ -648,14 +747,14 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                         <option>Surgery</option>
                         <option>Medical Student</option>
                       </select>
-                    </div>
+                    </div>}
 
                     <div>
                       <label className="mb-2 block text-xs font-bold text-[#0B192C]">
                         I am joining as a…
                       </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        {(['mentee', 'mentor'] as const).map((r) => (
+                      <div className={`grid grid-cols-1 gap-3 ${import.meta.env.DEV ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+                        {signupRoles.map(({ value: r, label, badge, description }) => (
                           <button
                             key={r}
                             type="button"
@@ -666,15 +765,30 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                                 : 'border-[#E1E7E5] bg-[#FFFFFF] text-[#52616C] hover:border-[#52796F]/50'
                             }`}
                           >
-                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E8F0EC] text-[10px] font-bold text-[#35564E]">{r === 'mentee' ? 'ME' : 'MD'}</span>
-                            <span>{r === 'mentee' ? 'Mentee' : 'Mentor'}</span>
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E8F0EC] text-[10px] font-bold text-[#35564E]">{badge}</span>
+                            <span>{label}</span>
                             <span className="text-[11px] font-normal text-[#74817D]">
-                              {r === 'mentee' ? 'Student / Resident' : 'Attending / Consultant'}
+                              {description}
                             </span>
                           </button>
                         ))}
                       </div>
                     </div>
+                    {import.meta.env.DEV && role === 'admin' && (
+                      <div>
+                        <label htmlFor="admin-secret" className="mb-1 block text-xs font-bold text-[#0B192C]">Development ADMIN_SECRET</label>
+                        <input
+                          id="admin-secret"
+                          type="password"
+                          autoComplete="off"
+                          value={adminSecret}
+                          onChange={(event) => setAdminSecret(event.target.value)}
+                          placeholder="Enter the value from Backend/.env.local"
+                          className="w-full rounded-lg border border-[#E1E7E5] bg-white px-4 py-2.5 text-sm text-[#0B192C] focus:border-[#52796F] focus:outline-none focus:ring-2 focus:ring-[#52796F]/15"
+                        />
+                        <p className="mt-1 text-[11px] leading-5 text-[#74817D]">Only available on the local development site. Do not use this flow on a public deployment.</p>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -774,7 +888,7 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                       onChange={(e) => setTermsAccepted(e.target.checked)}
                       className="mt-1 h-4 w-4 rounded border-[#E1E7E5] accent-[#52796F]"
                     />
-                    <span>I agree to the MedConnect community terms and understand credentials will be verified.</span>
+                    <span>I agree to the Good Neighbors community terms and understand NGO profiles may require verification.</span>
                   </label>
                 )}
 
@@ -784,7 +898,7 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
                   onClick={handleSubmit}
                   className="mt-2 w-full rounded-full bg-[#0B192C] py-3.5 text-sm font-bold text-white transition-all hover:bg-[#192B40] hover:shadow-md cursor-pointer"
                 >
-                  {mode === 'login' ? 'Sign In to MedConnect' : 'Create My Account'}
+                  {mode === 'login' ? 'Sign In to Good Neighbors' : 'Create My Account'}
                 </button>
 
                 {/* Divider */}
@@ -817,10 +931,10 @@ export default function LoginPage({ onLogin, onBack, initialMode = 'login' }: Lo
           </div>
 
           <div className="pt-6 text-center text-xs text-[#74817D]">
-            <span>MedConnect · A private, verified clinical learning environment</span>
+            <span>Good Neighbors · A community for volunteer training and local impact</span>
           </div>
         </div>
-
+        </div>
       </div>
     </div>
   );
